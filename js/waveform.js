@@ -18,24 +18,26 @@ function decimalPlaces(value) {
   return text.includes(".") ? text.split(".")[1].length : 0;
 }
 
-export function calculateVoltage(A, T, t) {
+export function calculateVoltage(A, T, t, baseVoltage = 7) {
   assertFiniteNumber(A, "A");
   assertFiniteNumber(T, "T");
   assertFiniteNumber(t, "t");
+  assertFiniteNumber(baseVoltage, "Formula Base B");
   if (T <= 0) {
     throw new RangeError("T must be greater than zero.");
   }
 
   return (
-    (7 + A / 2)
-    + (7 - A / 2) * Math.sin((2 * Math.PI * t) / T)
+    (baseVoltage + A / 2)
+    + (baseVoltage - A / 2) * Math.sin((2 * Math.PI * t) / T)
   );
 }
 
-export function calculateVoltageRange(A) {
+export function calculateVoltageRange(A, baseVoltage = 7) {
   assertFiniteNumber(A, "A");
-  const center = 7 + A / 2;
-  const amplitude = Math.abs(7 - A / 2);
+  assertFiniteNumber(baseVoltage, "Formula Base B");
+  const center = baseVoltage + A / 2;
+  const amplitude = Math.abs(baseVoltage - A / 2);
   return {
     min: center - amplitude,
     max: center + amplitude,
@@ -91,6 +93,7 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
   const aEnd = Number(input.aEnd);
   const aStep = Number(input.aStep);
   const currentLimit = Number(input.currentLimit);
+  const baseVoltage = input.baseVoltage === undefined ? 7 : Number(input.baseVoltage);
   const cycles = Number(input.cycles);
   const updateInterval = Number(input.updateInterval);
   const periods = [...new Set((input.periods ?? []).map(Number))].sort((a, b) => a - b);
@@ -100,6 +103,7 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
     [aEnd, "A End"],
     [aStep, "A Step"],
     [currentLimit, "Current Limit"],
+    [baseVoltage, "Formula Base B"],
     [cycles, "Cycles"],
     [updateInterval, "Update Interval"],
   ]) {
@@ -116,6 +120,9 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
   }
   if (aStep <= 0) {
     throw new RangeError("A Stepは0より大きい値にしてください。");
+  }
+  if (baseVoltage < 0) {
+    throw new RangeError("Formula Base Bは0 V以上にしてください。");
   }
   if (!Number.isInteger(cycles) || cycles < 1 || cycles > 99) {
     throw new RangeError("Cyclesは1～99の整数にしてください。");
@@ -144,7 +151,7 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
   let waveformMin = Number.POSITIVE_INFINITY;
   let waveformMax = Number.NEGATIVE_INFINITY;
   for (const A of aValues) {
-    const range = calculateVoltageRange(A);
+    const range = calculateVoltageRange(A, baseVoltage);
     waveformMin = Math.min(waveformMin, range.min);
     waveformMax = Math.max(waveformMax, range.max);
   }
@@ -165,6 +172,7 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
     cycles,
     updateInterval,
     currentLimit,
+    baseVoltage,
     waveformMin,
     waveformMax,
     totalDuration,

@@ -28,6 +28,13 @@ test("A=14.0 stays at 14 V", () => {
   assert.deepEqual(calculateVoltageRange(14), { min: 14, max: 14 });
 });
 
+test("Formula Base B replaces both 7 constants", () => {
+  closeTo(calculateVoltage(2, 1, 0, 6), 7);
+  closeTo(calculateVoltage(2, 1, 0.25, 6), 12);
+  closeTo(calculateVoltage(2, 1, 0.75, 6), 2);
+  assert.deepEqual(calculateVoltageRange(2, 6), { min: 2, max: 12 });
+});
+
 test("integer-scaled A sequence has 121 exact conditions", () => {
   const values = buildAValues(2, 14, 0.1);
   assert.equal(values.length, 121);
@@ -46,6 +53,7 @@ test("default experiment lasts 5,808 seconds", () => {
 test("default configuration validates and preserves limits", () => {
   const config = validateExperimentConfig({
     currentLimit: 1,
+    baseVoltage: 7,
     aStart: 2,
     aEnd: 14,
     aStep: 0.1,
@@ -58,11 +66,13 @@ test("default configuration validates and preserves limits", () => {
   assert.equal(config.waveformMin, 2);
   assert.equal(config.waveformMax, 14);
   assert.equal(config.totalDuration, 5_808);
+  assert.equal(config.baseVoltage, 7);
 });
 
 test("unsafe and malformed configurations are rejected", () => {
   const base = {
     currentLimit: 1,
+    baseVoltage: 7,
     aStart: 2,
     aEnd: 14,
     aStep: 0.1,
@@ -74,5 +84,7 @@ test("unsafe and malformed configurations are rejected", () => {
   assert.throws(() => validateExperimentConfig({ ...base, aStart: 1.9 }));
   assert.throws(() => validateExperimentConfig({ ...base, periods: [] }));
   assert.throws(() => validateExperimentConfig({ ...base, updateInterval: 25 }));
+  assert.throws(() => validateExperimentConfig({ ...base, baseVoltage: -0.1 }));
+  assert.throws(() => validateExperimentConfig({ ...base, baseVoltage: 13 }, { maxVoltage: 24 }));
   assert.throws(() => validateExperimentConfig(base, { maxVoltage: 12 }));
 });

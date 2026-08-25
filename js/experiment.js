@@ -1,4 +1,4 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.7";
+import { calculateVoltage } from "./waveform.js?v=20260825.9";
 
 const TELEMETRY_STALE_MS = 3_000;
 const HIGH_SPEED_MEASUREMENT_INTERVAL_MS = 50;
@@ -75,7 +75,12 @@ export class ExperimentController extends EventTarget {
       await this.waitUntil(now() + 60);
       this.throwIfStopped();
 
-      const firstVoltage = calculateVoltage(config.aValues[0], config.periods[0], 0);
+      const firstVoltage = calculateVoltage(
+        config.aValues[0],
+        config.periods[0],
+        0,
+        config.baseVoltage,
+      );
       this.assertSafeVoltage(firstVoltage, config.deviceMaxVoltage);
       await this.device.setVoltage(firstVoltage);
       this.throwIfStopped();
@@ -93,6 +98,7 @@ export class ExperimentController extends EventTarget {
           const segmentStart = now();
           this.activeSegment = {
             A,
+            baseVoltage: config.baseVoltage,
             T,
             aIndex,
             aCount: config.aValues.length,
@@ -109,7 +115,7 @@ export class ExperimentController extends EventTarget {
             if (segmentElapsed >= segmentDuration) break;
 
             const cycle = Math.min(config.cycles, Math.floor(segmentElapsed / T) + 1);
-            const commandVoltage = calculateVoltage(A, T, segmentElapsed);
+            const commandVoltage = calculateVoltage(A, T, segmentElapsed, config.baseVoltage);
             this.assertSafeVoltage(commandVoltage, config.deviceMaxVoltage);
             await this.device.setVoltage(commandVoltage);
             this.throwIfStopped();
@@ -138,6 +144,7 @@ export class ExperimentController extends EventTarget {
               progress,
               remainingSeconds,
               A,
+              baseVoltage: config.baseVoltage,
               T,
               cycle,
               aIndex,
@@ -293,6 +300,7 @@ export class ExperimentController extends EventTarget {
       elapsedSeconds,
       measurementElapsedSeconds: elapsedSeconds,
       A: context.A,
+      baseVoltage: context.baseVoltage,
       T: context.T,
       cycle,
       aIndex: context.aIndex,

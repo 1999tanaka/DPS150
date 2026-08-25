@@ -80,6 +80,7 @@ class FakeDevice extends EventTarget {
 function shortConfig(duration = 0.04) {
   return {
     currentLimit: 1,
+    baseVoltage: 7,
     aValues: [2],
     periods: [duration],
     cycles: 1,
@@ -101,6 +102,16 @@ test("short experiment sets current, runs waveform, and turns output off", async
   assert.equal(device.outputEnabled, false);
   assert.ok(device.offCalls >= 1);
   assert.ok(logger.size >= 1);
+});
+
+test("editable Formula Base B is used by the device voltage commands", async () => {
+  const device = new FakeDevice();
+  const controller = new ExperimentController(device, new ExperimentLogger());
+  const result = await controller.start({ ...shortConfig(), baseVoltage: 6 });
+
+  assert.equal(result.status, "completed");
+  assert.equal(device.voltages[0], 7);
+  assert.ok(device.voltages.every((voltage) => voltage >= 2 && voltage <= 12));
 });
 
 test("STOP interrupts the timer and leaves output off", async () => {
