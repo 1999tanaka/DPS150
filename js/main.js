@@ -1,12 +1,12 @@
-import { DPS150 } from "./dps150.js";
-import { ExperimentController } from "./experiment.js";
-import { CurrentGraph, VoltageGraph } from "./graph.js";
-import { ExperimentLogger } from "./logger.js";
+import { DPS150 } from "./dps150.js?v=20260825.4";
+import { ExperimentController } from "./experiment.js?v=20260825.4";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.4";
+import { ExperimentLogger } from "./logger.js?v=20260825.4";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js";
+} from "./waveform.js?v=20260825.4";
 
 const byId = (id) => document.getElementById(id);
 
@@ -51,7 +51,7 @@ const elements = {
   measuredPower: byId("measured-power"),
   voltageGraphCanvas: byId("voltage-graph"),
   currentGraphCanvas: byId("current-graph"),
-  voltageGraphWindow: byId("voltage-graph-window"),
+  voltageGraphWindow: byId("voltage-graph-window") ?? byId("graph-window"),
   currentGraphWindow: byId("current-graph-window"),
   downloadCsv: byId("download-csv"),
   startDialog: byId("start-dialog"),
@@ -67,7 +67,11 @@ const elements = {
 const device = new DPS150();
 const logger = new ExperimentLogger();
 const voltageGraph = new VoltageGraph(elements.voltageGraphCanvas);
-const currentGraph = new CurrentGraph(elements.currentGraphCanvas);
+// Current UI elements were added after the first public version. Treat them as
+// optional so a briefly cached older index.html cannot abort an active run.
+const currentGraph = elements.currentGraphCanvas
+  ? new CurrentGraph(elements.currentGraphCanvas)
+  : null;
 const experiment = new ExperimentController(device, logger);
 
 let pendingConfig = null;
@@ -159,7 +163,9 @@ function updateDeviceState(state = device.getState()) {
 
   elements.outputState.textContent = state.outputEnabled ? "ON" : "OFF";
   elements.outputState.className = `output-badge ${state.outputEnabled ? "output-on" : "output-off"}`;
-  elements.commandCurrent.textContent = numericText(state.setCurrent, 3);
+  if (elements.commandCurrent) {
+    elements.commandCurrent.textContent = numericText(state.setCurrent, 3);
+  }
   updateButtons();
 }
 
@@ -255,7 +261,7 @@ function openStartConfirmation() {
 async function runExperiment(config) {
   activeConfig = config;
   voltageGraph.clear();
-  currentGraph.clear();
+  currentGraph?.clear();
   setFormDisabled(true);
   elements.startButton.disabled = true;
   elements.stopButton.disabled = false;
@@ -339,9 +345,13 @@ experiment.addEventListener("started", () => {
 experiment.addEventListener("segment", (event) => {
   const { T } = event.detail;
   const voltageWindowSeconds = voltageGraph.setPeriod(T);
-  const currentWindowSeconds = currentGraph.setPeriod(T);
-  elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s`;
-  elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s`;
+  const currentWindowSeconds = currentGraph?.setPeriod(T);
+  if (elements.voltageGraphWindow) {
+    elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s`;
+  }
+  if (elements.currentGraphWindow && currentWindowSeconds) {
+    elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s`;
+  }
 });
 
 experiment.addEventListener("progress", (event) => {
@@ -351,7 +361,9 @@ experiment.addEventListener("progress", (event) => {
   elements.currentCycle.textContent = `${sample.cycle} / ${activeConfig?.cycles ?? "—"}`;
   elements.currentStep.textContent = `${sample.aIndex + 1} / ${sample.aCount}`;
   elements.commandVoltage.textContent = sample.commandVoltage.toFixed(3);
-  elements.commandCurrent.textContent = sample.commandCurrent.toFixed(3);
+  if (elements.commandCurrent) {
+    elements.commandCurrent.textContent = sample.commandCurrent.toFixed(3);
+  }
   elements.elapsedTime.textContent = formatDuration(sample.elapsedSeconds);
   elements.remainingTime.textContent = formatDuration(sample.remainingSeconds);
   elements.finishTime.textContent = finishClock(sample.remainingSeconds);
@@ -361,7 +373,7 @@ experiment.addEventListener("progress", (event) => {
     commandVoltage: sample.commandVoltage,
     measuredVoltage: sample.measuredVoltage,
   });
-  currentGraph.addPoint({
+  currentGraph?.addPoint({
     time: sample.elapsedSeconds,
     commandCurrent: sample.commandCurrent,
     measuredCurrent: sample.measuredCurrent,
