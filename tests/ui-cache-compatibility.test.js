@@ -15,6 +15,13 @@ test("loads the entry module with a cache-busting version", () => {
   assert.match(html, /src="js\/main\.js\?v=[^"]+"/);
 });
 
+test("includes the browser Python editor and a same-origin module worker policy", () => {
+  assert.match(html, /id="python-code"/);
+  assert.match(html, /id="check-python"/);
+  assert.match(html, /worker-src 'self'/);
+  assert.match(html, /script-src 'self' 'wasm-unsafe-eval'/);
+});
+
 test("allows current UI elements to be absent in a cached older document", () => {
   assert.match(main, /elements\.currentGraphCanvas\s*\?\s*new CurrentGraph/);
   assert.match(main, /currentGraph\?\.addPoint/);

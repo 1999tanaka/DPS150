@@ -94,12 +94,13 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
   const cycles = Number(input.cycles);
   const updateInterval = Number(input.updateInterval);
   const periods = [...new Set((input.periods ?? []).map(Number))].sort((a, b) => a - b);
+  const pythonSource = String(input.pythonSource ?? "").trim();
 
   for (const [value, label] of [
     [aStart, "A Start"],
     [aEnd, "A End"],
     [aStep, "A Step"],
-    [currentLimit, "Current Limit"],
+    [currentLimit, "Python Current Safety Max"],
     [cycles, "Cycles"],
     [updateInterval, "Update Interval"],
   ]) {
@@ -126,13 +127,16 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
   if (periods.length === 0 || periods.some((period) => !Number.isFinite(period) || period <= 0)) {
     throw new RangeError("Periodを1つ以上選択してください。");
   }
+  if (Object.hasOwn(input, "pythonSource") && !pythonSource) {
+    throw new RangeError("Python制御コードを入力してください。");
+  }
 
   const reportedCurrentLimit = Number(deviceLimits.maxCurrent);
   const deviceMaxCurrent = Number.isFinite(reportedCurrentLimit) && reportedCurrentLimit > 0
     ? Math.min(reportedCurrentLimit, 5.1)
     : 5.0;
   if (currentLimit <= 0 || currentLimit > deviceMaxCurrent) {
-    throw new RangeError(`Current Limitは0より大きく${deviceMaxCurrent.toFixed(2)} A以下にしてください。`);
+    throw new RangeError(`Python Current Safety Maxは0より大きく${deviceMaxCurrent.toFixed(2)} A以下にしてください。`);
   }
 
   const aValues = buildAValues(aStart, aEnd, aStep);
@@ -170,6 +174,7 @@ export function validateExperimentConfig(input, deviceLimits = {}) {
     totalDuration,
     deviceMaxVoltage,
     deviceMaxCurrent,
+    pythonSource,
   });
 }
 

@@ -32,3 +32,15 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Pyodide
+
+The browser Python feature includes the unmodified Pyodide core runtime:
+
+- Project: `pyodide/pyodide`
+- Version: `314.0.6`
+- Source: <https://github.com/pyodide/pyodide/tree/314.0.6>
+- Distributed files: `vendor/pyodide/`
+- License: Mozilla Public License 2.0
+
+The complete license text is included at [`vendor/pyodide/LICENSE`](vendor/pyodide/LICENSE). The corresponding source code is available from the versioned source link above.

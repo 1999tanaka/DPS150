@@ -1,12 +1,13 @@
-import { DPS150 } from "./dps150.js?v=20260825.7";
-import { ExperimentController } from "./experiment.js?v=20260825.7";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.7";
-import { ExperimentLogger } from "./logger.js?v=20260825.7";
+import { DPS150 } from "./dps150.js?v=20260825.8";
+import { ExperimentController } from "./experiment.js?v=20260825.8";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.8";
+import { ExperimentLogger } from "./logger.js?v=20260825.8";
+import { PythonControlEngine } from "./python-control.js?v=20260825.8";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js?v=20260825.7";
+} from "./waveform.js?v=20260825.8";
 
 const byId = (id) => document.getElementById(id);
 
@@ -26,6 +27,10 @@ const elements = {
   aStep: byId("a-step"),
   cycles: byId("cycles"),
   updateInterval: byId("update-interval"),
+  pythonCode: byId("python-code"),
+  checkPython: byId("check-python"),
+  pythonStatus: byId("python-status"),
+  pythonRuntimeBadge: byId("python-runtime-badge"),
   voltageRange: byId("voltage-range"),
   validationMessage: byId("validation-message"),
   startButton: byId("start-button"),
@@ -63,23 +68,26 @@ const elements = {
   confirmPeriods: byId("confirm-periods"),
   confirmCycles: byId("confirm-cycles"),
   confirmDuration: byId("confirm-duration"),
+  confirmControl: byId("confirm-control"),
   confirmCurrent: byId("confirm-current"),
 };
 
 const device = new DPS150();
 const logger = new ExperimentLogger();
+const pythonControl = new PythonControlEngine();
 const voltageGraph = new VoltageGraph(elements.voltageGraphCanvas);
 // Current UI elements were added after the first public version. Treat them as
 // optional so a briefly cached older index.html cannot abort an active run.
 const currentGraph = elements.currentGraphCanvas
   ? new CurrentGraph(elements.currentGraphCanvas)
   : null;
-const experiment = new ExperimentController(device, logger);
+const experiment = new ExperimentController(device, logger, pythonControl);
 
 let pendingConfig = null;
 let activeConfig = null;
 let connectionBusy = false;
 let activeRunPromise = null;
+let pythonBusy = false;
 
 function readFormValues() {
   return {
@@ -91,6 +99,7 @@ function readFormValues() {
       .map((checkbox) => checkbox.value),
     cycles: elements.cycles.value,
     updateInterval: elements.updateInterval.value,
+    pythonSource: elements.pythonCode.value,
   };
 }
 
@@ -142,16 +151,24 @@ function logSummary(recordCount) {
 }
 
 function setFormDisabled(disabled) {
-  for (const control of elements.settingsForm.querySelectorAll("input, select")) {
+  for (const control of elements.settingsForm.querySelectorAll("input, select, textarea")) {
     control.disabled = disabled;
   }
+  elements.checkPython.disabled = disabled || pythonBusy;
 }
 
 function updateButtons() {
   const hasCurrentLimit = Number(elements.currentLimit.value) > 0;
+  const hasPythonCode = Boolean(elements.pythonCode.value.trim());
   elements.connectButton.disabled = connectionBusy;
-  elements.startButton.disabled = !device.connected || experiment.running || !hasCurrentLimit || connectionBusy;
+  elements.startButton.disabled = !device.connected
+    || experiment.running
+    || !hasCurrentLimit
+    || !hasPythonCode
+    || connectionBusy
+    || pythonBusy;
   elements.stopButton.disabled = !experiment.running;
+  elements.checkPython.disabled = experiment.running || pythonBusy || !hasPythonCode;
 }
 
 function updateDeviceState(state = device.getState()) {
@@ -187,7 +204,7 @@ function updatePreview() {
   let config;
   try {
     config = getConfig({ preview: true });
-    elements.voltageRange.textContent = `Expected range ${config.waveformMin.toFixed(2)}—${config.waveformMax.toFixed(2)} V`;
+    elements.voltageRange.textContent = `Python output safety check 0—${config.deviceMaxVoltage.toFixed(2)} V`;
     elements.remainingTime.textContent = formatDuration(config.totalDuration);
     elements.aTotal.textContent = `/ ${config.aEnd.toFixed(1)}`;
     elements.currentStep.textContent = `0 / ${config.aValues.length}`;
@@ -227,7 +244,7 @@ async function handleConnect() {
       const state = await device.connect();
       updateDeviceState(state);
       updateTelemetry(state);
-      setStatus("Connected. Current Limitと実験条件を確認してください。", "success");
+      setStatus("Connected. Python Current Safety Maxと実験条件を確認してください。", "success");
       setValidation();
     }
   } catch (error) {
@@ -258,6 +275,7 @@ function openStartConfirmation() {
   elements.confirmPeriods.textContent = `${pendingConfig.periods.join(" / ")} sec`;
   elements.confirmCycles.textContent = `${pendingConfig.cycles} each`;
   elements.confirmDuration.textContent = formatDuration(pendingConfig.totalDuration);
+  elements.confirmControl.textContent = "Browser Python · isolated Worker";
   elements.confirmCurrent.textContent = `${pendingConfig.currentLimit.toFixed(3)} A`;
   elements.safetyConfirm.checked = false;
   elements.confirmStart.disabled = true;
@@ -275,7 +293,7 @@ async function runExperiment(config) {
   elements.downloadCsv.disabled = true;
   elements.runState.textContent = "Starting";
   elements.runPulse.classList.add("active");
-  setStatus("Current Limitと初期電圧を設定しています…", "warning");
+  setStatus("Python制御を準備し、電流安全上限と初期電圧を設定しています…", "warning");
 
   try {
     activeRunPromise = experiment.start(config);
@@ -305,15 +323,63 @@ async function handleStop() {
   }
 }
 
+async function handleCheckPython() {
+  if (experiment.running || pythonBusy) return;
+  const source = elements.pythonCode.value.trim();
+  if (!source) {
+    elements.pythonStatus.textContent = "Pythonコードを入力してください。";
+    elements.pythonStatus.className = "python-status python-status-error";
+    return;
+  }
+
+  pythonBusy = true;
+  elements.pythonStatus.textContent = "Loading browser Python…";
+  elements.pythonStatus.className = "python-status python-status-loading";
+  updateButtons();
+  try {
+    const runtime = await pythonControl.prepare(source);
+    const state = device.getState();
+    const configuredMax = Number(elements.currentLimit.value);
+    const maxCurrent = Number.isFinite(configuredMax) && configuredMax > 0
+      ? Math.min(configuredMax, state.maxCurrent || configuredMax)
+      : (state.maxCurrent || 5);
+    const sample = await pythonControl.evaluate({
+      t: 0,
+      A: Number(elements.aStart.value) || 2,
+      T: Number(elements.settingsForm.querySelector('input[name="period"]:checked')?.value) || 1,
+      cycle: 1,
+    }, {
+      maxVoltage: state.maxVoltage || 24,
+      maxCurrent,
+    });
+    elements.pythonRuntimeBadge.textContent = `Python ${runtime.version} · Worker`;
+    elements.pythonStatus.textContent = `Ready · t=0 → ${sample.voltage.toFixed(3)} V / ${sample.current.toFixed(3)} A`;
+    elements.pythonStatus.className = "python-status python-status-ready";
+    setValidation();
+  } catch (error) {
+    elements.pythonStatus.textContent = `Python error: ${error.message}`;
+    elements.pythonStatus.className = "python-status python-status-error";
+    setValidation(error.message);
+  } finally {
+    pythonBusy = false;
+    updateButtons();
+  }
+}
+
 elements.connectButton.addEventListener("click", handleConnect);
 elements.startButton.addEventListener("click", openStartConfirmation);
 elements.stopButton.addEventListener("click", handleStop);
+elements.checkPython.addEventListener("click", handleCheckPython);
 elements.settingsForm.addEventListener("submit", (event) => event.preventDefault());
 elements.settingsForm.addEventListener("input", () => {
   setValidation();
   updatePreview();
 });
 elements.settingsForm.addEventListener("change", updatePreview);
+elements.pythonCode.addEventListener("input", () => {
+  elements.pythonStatus.textContent = "Not checked · code changed";
+  elements.pythonStatus.className = "python-status";
+});
 
 elements.safetyConfirm.addEventListener("change", () => {
   elements.confirmStart.disabled = !elements.safetyConfirm.checked;
@@ -347,6 +413,19 @@ device.addEventListener("error", (event) => {
 experiment.addEventListener("started", () => {
   elements.runState.textContent = "Running";
   setStatus("Experiment running. このページを前面に保ち、PCをスリープさせないでください。", "success");
+});
+
+experiment.addEventListener("pythonstatus", (event) => {
+  if (event.detail.state === "loading") {
+    elements.pythonStatus.textContent = "Loading browser Python…";
+    elements.pythonStatus.className = "python-status python-status-loading";
+    setStatus("ブラウザ内Pythonを安全なWorkerで起動しています。OUTPUTはまだOFFです。", "warning");
+  } else if (event.detail.state === "ready") {
+    elements.pythonRuntimeBadge.textContent = `Python ${event.detail.version} · Worker`;
+    elements.pythonStatus.textContent = "Running in isolated Worker";
+    elements.pythonStatus.className = "python-status python-status-ready";
+    setStatus("Python制御でExperiment running. このページを前面に保ってください。", "success");
+  }
 });
 
 experiment.addEventListener("segment", () => {
@@ -405,6 +484,8 @@ experiment.addEventListener("completed", (event) => {
   setProgress(1);
   setStatus(`Completed. OUTPUT OFF. ${logSummary(event.detail.recordCount)}を保存できます。`, "success");
   elements.downloadCsv.disabled = logger.size === 0;
+  elements.pythonStatus.textContent = "Completed · Worker stopped";
+  elements.pythonStatus.className = "python-status";
 });
 
 experiment.addEventListener("stopped", (event) => {
@@ -413,6 +494,8 @@ experiment.addEventListener("stopped", (event) => {
   elements.elapsedTime.textContent = formatDuration(event.detail.elapsedSeconds);
   setStatus(`Stopped. OUTPUT OFF. ${logSummary(event.detail.recordCount)}を保存できます。`, "warning");
   elements.downloadCsv.disabled = logger.size === 0;
+  elements.pythonStatus.textContent = "Stopped · Worker terminated";
+  elements.pythonStatus.className = "python-status";
 });
 
 experiment.addEventListener("error", (event) => {
@@ -420,6 +503,8 @@ experiment.addEventListener("error", (event) => {
   elements.runPulse.classList.remove("active");
   setStatus(`ERROR — ${event.detail.error.message} Output control stopped.`, "error");
   elements.downloadCsv.disabled = logger.size === 0;
+  elements.pythonStatus.textContent = `Stopped · ${event.detail.error.message}`;
+  elements.pythonStatus.className = "python-status python-status-error";
 });
 
 window.addEventListener("beforeunload", (event) => {

@@ -483,6 +483,127 @@ select {
   font-size: 11px;
 }
 
+.python-editor-section {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid rgba(96, 165, 250, 0.34);
+  border-radius: 9px;
+  background: linear-gradient(145deg, rgba(10, 29, 45, 0.9), rgba(4, 14, 23, 0.92));
+}
+
+.python-editor-heading,
+.python-editor-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.python-editor-heading h3 {
+  margin: 4px 0 0;
+  color: #dfeaf0;
+  font-size: 15px;
+}
+
+.python-runtime-badge {
+  padding: 5px 7px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+  border-radius: 5px;
+  color: #9cc9ff;
+  font: 650 8px var(--mono);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.python-editor-help,
+.python-contract {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.65;
+}
+
+.python-editor-help {
+  margin: 10px 0;
+}
+
+.python-editor-help code,
+.python-contract code {
+  color: #b9d8ff;
+  font-family: var(--mono);
+}
+
+.python-code-label {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--subtle);
+  font: 650 9px var(--mono);
+  letter-spacing: 0.08em;
+}
+
+.python-code {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 244px;
+  padding: 12px;
+  resize: vertical;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  outline: 0;
+  background: #030b12;
+  color: #d7e8f2;
+  caret-color: var(--cyan);
+  font: 11px/1.55 var(--mono);
+  tab-size: 4;
+}
+
+.python-code:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, 0.08);
+}
+
+.python-code:disabled {
+  color: #8295a2;
+  cursor: not-allowed;
+}
+
+.python-editor-footer {
+  margin-top: 9px;
+}
+
+.python-status {
+  overflow: hidden;
+  color: var(--subtle);
+  font: 600 9px var(--mono);
+  text-overflow: ellipsis;
+}
+
+.python-status-loading {
+  color: var(--orange);
+}
+
+.python-status-ready {
+  color: var(--cyan);
+}
+
+.python-status-error {
+  color: #ff9ca3;
+}
+
+.python-check {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 12px;
+  font-size: 9px;
+}
+
+.python-contract {
+  margin: 9px 0 0;
+}
+
+.python-contract strong {
+  color: #a9bac5;
+}
+
 .triple-grid,
 .dual-grid {
   display: grid;

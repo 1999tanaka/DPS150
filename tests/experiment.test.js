@@ -126,3 +126,39 @@ test("high-speed polling records individual raw measurement events", async () =>
   assert.equal(measurements.length, device.measurementRequests);
   assert.ok(measurements.every((record) => Number.isFinite(record.measurementElapsedSeconds)));
 });
+
+test("Python control values drive both voltage and current within the safety ceiling", async () => {
+  const device = new FakeDevice();
+  const calls = [];
+  const pythonControl = {
+    async prepare(source) {
+      calls.push(["prepare", source]);
+      return { version: "test" };
+    },
+    async evaluate(context) {
+      calls.push(["evaluate", context]);
+      return {
+        voltage: 13 + Math.min(context.t, 1),
+        current: context.t > 0.01 ? 0.15 : 0.1,
+      };
+    },
+    terminate() {
+      calls.push(["terminate"]);
+    },
+  };
+  const controller = new ExperimentController(device, new ExperimentLogger(), pythonControl);
+  const config = {
+    ...shortConfig(0.04),
+    currentLimit: 0.2,
+    pythonSource: "def control(t, A, T, cycle): return (13, 0.1)",
+  };
+
+  const result = await controller.start(config);
+
+  assert.equal(result.status, "completed");
+  assert.ok(calls.some(([name]) => name === "prepare"));
+  assert.ok(calls.filter(([name]) => name === "evaluate").length >= 2);
+  assert.ok(device.voltages.every((voltage) => voltage >= 13 && voltage <= 14));
+  assert.ok(device.current >= 0.1 && device.current <= 0.2);
+  assert.ok(calls.some(([name]) => name === "terminate"));
+});

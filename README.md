@@ -1,6 +1,8 @@
-# FNIRSI DPS-150 Auto Wave Control
+# FNIRSI DPS-150 Python Wave Control
 
-FNIRSI DPS-150をUSB接続し、Chrome / Edgeから正弦波状の電圧シーケンスを自動実行する静的Webアプリです。DPS-150との通信はWeb Serial APIを使ってブラウザとUSBデバイスの間だけで行い、測定値を外部サーバーへ送信しません。
+FNIRSI DPS-150をUSB接続し、Chrome / Edgeの画面に書いたPythonで電圧・電流指令を生成する静的Webアプリです。DPS-150との通信はWeb Serial APIを使ってブラウザとUSBデバイスの間だけで行い、測定値を外部サーバーへ送信しません。
+
+この`feature/python-control-ui`ブランチはPython制御版です。`main`の安定版は変更せず残しています。下記の公開URLは現在`main`を配信しているため、このブランチをマージまたは別URLへ公開するまではPythonエディターが表示されません。
 
 公開URL（GitHub Pages）:
 
@@ -8,7 +10,7 @@ FNIRSI DPS-150をUSB接続し、Chrome / Edgeから正弦波状の電圧シー�
 
 ## 重要な安全上の注意
 
-- 実験前に、負荷へ適合する **Current Limit** とDPS-150本体のOVP / OCP等を設定してください。
+- 実験前に、負荷へ適合する **Python Current Safety Max** とDPS-150本体のOVP / OCP等を設定してください。この値はPythonが返せる電流指令の絶対上限です。
 - 初回は固定5 V、OUTPUT ON/OFF、短い1周期試験の順に確認し、最初から約97分のフルシーケンスを実行しないでください。
 - STOP、正常終了、通信エラー時にはOUTPUT OFFを送信します。ただしUSB抜去、ブラウザ終了、PCスリープ等では、WebアプリからのOUTPUT OFFを保証できません。
 - Command Voltageは設定指令値です。実際のアナログ出力波形はオシロスコープやデータロガーで確認してください。
@@ -19,13 +21,31 @@ FNIRSI DPS-150をUSB接続し、Chrome / Edgeから正弦波状の電圧シー�
 1. DPS-150を会社PCへUSB接続します。
 2. ChromeまたはEdgeで上記GitHub Pages URLを開きます。
 3. `CONNECT DEVICE`を押し、DPS-150のシリアルポートを選択します。
-4. 試験対象に適したCurrent Limitを入力します。
-5. A、周期、サイクル数、更新間隔を確認して`START`を押します。
-6. 確認画面で配線とCurrent Limitの確認にチェックし、`START OUTPUT`を押します。
-7. 実行中はページを前面に保ち、PCをスリープさせないでください。
-8. 終了後、必要に応じて`DOWNLOAD CSV`からログを保存します。
+4. 試験対象に適したPython Current Safety Maxを入力します。
+5. 画面の`control.py`へ電圧・電流の制御式を書き、`CHECK PYTHON`で構文と初期値を確認します。
+6. A、周期、サイクル数、更新間隔を確認して`START`を押します。
+7. 確認画面で配線と安全上限の確認にチェックし、`START OUTPUT`を押します。
+8. 実行中はページを前面に保ち、PCをスリープさせないでください。
+9. 終了後、必要に応じて`DOWNLOAD CSV`からログを保存します。
 
-会社PCへのPython、Node.js、専用アプリのインストールは不要です。Web SerialはSecure Contextが必要なため、GitHub PagesのHTTPS URLから利用してください。FirefoxとSafariは対象外です。
+会社PCへのPython、Node.js、専用アプリのインストールは不要です。同梱したPyodideがPythonをWebAssemblyとしてブラウザ内で実行します。Web SerialはSecure Contextが必要なため、GitHub PagesのHTTPS URLから利用してください。FirefoxとSafariは対象外です。
+
+## Python制御コード
+
+各更新点で次の関数を呼び出します。
+
+```python
+import math
+
+def control(t, A, T, cycle):
+    voltage = (7 + A / 2) + (7 - A / 2) * math.sin(2 * math.pi * t / T)
+    current = 0.100
+    return {"voltage": voltage, "current": current}
+```
+
+引数`t`は現在のA/T条件を開始してからの実経過秒、`A`と`T`は画面のシーケンス条件、`cycle`は1始まりの現在周期です。戻り値は`{"voltage": V, "current": A}`または`(V, A)`とします。
+
+PythonはUIやSTOP処理とは別のWeb Workerで動きます。コード準備が3秒、1回の制御計算が750 msを超えた場合はWorkerを強制終了し、DPS-150へOUTPUT OFFを送ります。電圧は0 V以上かつ機器上限以下、電流は0 Aより大きく画面の安全上限以下でなければ送信しません。外部パッケージのダウンロードは行わず、同梱されたPython標準ライブラリだけを対象とします。
 
 ## デフォルト実験条件
 
@@ -51,6 +71,9 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - Web Serialによる115200 bps接続、セッション初期化、機器情報取得
 - 電圧・Current Limit設定、OUTPUT ON/OFF
 - A / T / Cycleの自動シーケンス
+- WebUI内のPythonによる電圧・電流指令生成
+- Pythonを分離Workerで実行し、ハング時はWorker終了・OUTPUT OFF
+- Python指令値の有限値・電圧上限・電流安全上限チェック
 - STOP最優先制御、二重START防止、実行中の設定ロック
 - 0～機器報告上限Vの送信前チェック
 - USB切断、送受信タイムアウト、保護状態検出時の異常停止
@@ -63,7 +86,8 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - Command / Measuredの電圧・電流数値、Measured Power、進捗・残り時間表示
 - Wake Lock（利用可能なブラウザのみ）とページ離脱警告
 - 指令行と実測行を区別し、受信時刻・実測サンプル番号を含む最大250,000件のCSVログ
-- 外部CDN、外部API、サーバー側データベース不使用
+- Pyodide 314.0.6をリポジトリ内に同梱（外部CDN不使用）
+- 外部API、サーバー側データベース不使用
 
 ## ファイル構成
 
@@ -78,6 +102,9 @@ js/
   experiment.js    実験シーケンス・安全停止
   graph.js         Canvasグラフ
   logger.js        ログ・CSV
+  python-control.js Python Workerとの安全な要求・タイムアウト管理
+  python-worker.js  Pyodide上でcontrol()を実行
+vendor/pyodide/     同梱したPyodide 314.0.6 core runtime
 tests/
   *.test.js        波形、パケット、CSVの単体テスト
 .github/workflows/

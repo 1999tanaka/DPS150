@@ -1,4 +1,4 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.7";
+import { calculateVoltage } from "./waveform.js?v=20260825.8";
 
 const TELEMETRY_STALE_MS = 3_000;
 const HIGH_SPEED_MEASUREMENT_INTERVAL_MS = 50;
@@ -15,10 +15,11 @@ export class ExperimentStoppedError extends Error {
 }
 
 export class ExperimentController extends EventTarget {
-  constructor(device, logger) {
+  constructor(device, logger, pythonControl = null) {
     super();
     this.device = device;
     this.logger = logger;
+    this.pythonControl = pythonControl;
     this.running = false;
     this.stopRequested = false;
     this.fatalError = null;
@@ -31,6 +32,8 @@ export class ExperimentController extends EventTarget {
     this.measurementPollTask = null;
     this.lastEmittedMeasurementSequence = null;
     this.activeSegment = null;
+    this.usingPython = false;
+    this.lastCommandCurrent = null;
     this.wakeLock = null;
 
     device.addEventListener("disconnect", (event) => {
@@ -63,6 +66,8 @@ export class ExperimentController extends EventTarget {
     this.emergencyOffPromise = null;
     this.lastEmittedMeasurementSequence = null;
     this.activeSegment = null;
+    this.usingPython = Boolean(config.pythonSource);
+    this.lastCommandCurrent = null;
     this.startedAt = now();
     this.logger.clear();
     await this.acquireWakeLock();
@@ -70,14 +75,28 @@ export class ExperimentController extends EventTarget {
 
     let completedPlannedSeconds = 0;
     try {
-      await this.device.setCurrent(config.currentLimit);
+      if (this.usingPython) {
+        if (!this.pythonControl) throw new Error("ブラウザ内Python制御を利用できません。");
+        this.emit("pythonstatus", { state: "loading" });
+        const runtime = await this.runPythonOperation(() => this.pythonControl.prepare(config.pythonSource));
+        this.throwIfStopped();
+        this.emit("pythonstatus", { state: "ready", version: runtime.version });
+      }
+
+      const firstCommand = await this.calculateCommand(config, {
+        t: 0,
+        A: config.aValues[0],
+        T: config.periods[0],
+        cycle: 1,
+      });
+      this.assertSafeCommand(firstCommand, config);
+      await this.device.setCurrent(firstCommand.current);
+      this.lastCommandCurrent = firstCommand.current;
       this.throwIfStopped();
       await this.waitUntil(now() + 60);
       this.throwIfStopped();
 
-      const firstVoltage = calculateVoltage(config.aValues[0], config.periods[0], 0);
-      this.assertSafeVoltage(firstVoltage, config.deviceMaxVoltage);
-      await this.device.setVoltage(firstVoltage);
+      await this.device.setVoltage(firstCommand.voltage);
       this.throwIfStopped();
       await this.waitUntil(now() + 60);
       this.throwIfStopped();
@@ -97,7 +116,7 @@ export class ExperimentController extends EventTarget {
             aIndex,
             aCount: config.aValues.length,
             cycles: config.cycles,
-            currentLimit: config.currentLimit,
+            commandCurrent: this.lastCommandCurrent,
             segmentStart,
           };
           this.emit("segment", { A, T, aIndex, config });
@@ -109,9 +128,24 @@ export class ExperimentController extends EventTarget {
             if (segmentElapsed >= segmentDuration) break;
 
             const cycle = Math.min(config.cycles, Math.floor(segmentElapsed / T) + 1);
-            const commandVoltage = calculateVoltage(A, T, segmentElapsed);
-            this.assertSafeVoltage(commandVoltage, config.deviceMaxVoltage);
-            await this.device.setVoltage(commandVoltage);
+            const command = await this.calculateCommand(config, {
+              t: segmentElapsed,
+              A,
+              T,
+              cycle,
+            });
+            this.throwIfStopped();
+            this.assertSafeCommand(command, config);
+            if (
+              !Number.isFinite(this.lastCommandCurrent)
+              || Math.abs(command.current - this.lastCommandCurrent) >= 0.0005
+            ) {
+              await this.device.setCurrent(command.current);
+              this.lastCommandCurrent = command.current;
+              this.activeSegment.commandCurrent = command.current;
+              this.throwIfStopped();
+            }
+            await this.device.setVoltage(command.voltage);
             this.throwIfStopped();
 
             const telemetry = this.device.getState();
@@ -142,8 +176,8 @@ export class ExperimentController extends EventTarget {
               cycle,
               aIndex,
               aCount: config.aValues.length,
-              commandVoltage,
-              commandCurrent: config.currentLimit,
+              commandVoltage: command.voltage,
+              commandCurrent: this.lastCommandCurrent,
               measuredVoltage: null,
               measuredCurrent: null,
               measuredPower: null,
@@ -217,8 +251,11 @@ export class ExperimentController extends EventTarget {
       this.running = false;
       this.stopRequested = false;
       this.activeSegment = null;
+      this.usingPython = false;
+      this.lastCommandCurrent = null;
       this.releaseDelay?.();
       this.releaseDelay = null;
+      this.pythonControl?.terminate();
       await this.releaseWakeLock();
     }
   }
@@ -230,6 +267,7 @@ export class ExperimentController extends EventTarget {
     this.releaseDelay?.();
     this.measurementPolling = false;
     this.releaseMeasurementDelay?.();
+    if (this.usingPython) this.pythonControl?.terminate(new Error("STOPによりPython制御を終了しました。"));
     this.emergencyOffPromise ??= this.device.outputOff().catch((error) => {
       this.fatalError ??= error;
       throw error;
@@ -245,6 +283,7 @@ export class ExperimentController extends EventTarget {
     this.releaseDelay?.();
     this.measurementPolling = false;
     this.releaseMeasurementDelay?.();
+    if (this.usingPython) this.pythonControl?.terminate(this.fatalError);
     this.emergencyOffPromise ??= this.device.outputOff().catch(() => undefined);
   }
 
@@ -256,6 +295,45 @@ export class ExperimentController extends EventTarget {
   assertSafeVoltage(voltage, deviceMaxVoltage) {
     if (!Number.isFinite(voltage) || voltage < 0 || voltage > deviceMaxVoltage) {
       throw new Error(`安全範囲外の電圧値を検出しました: ${voltage}`);
+    }
+  }
+
+  assertSafeCommand(command, config) {
+    this.assertSafeVoltage(command.voltage, config.deviceMaxVoltage);
+    if (
+      !Number.isFinite(command.current)
+      || command.current <= 0
+      || command.current > config.currentLimit
+      || command.current > config.deviceMaxCurrent
+    ) {
+      throw new Error(
+        `安全範囲外の電流値を検出しました: ${command.current}（Python安全上限 ${config.currentLimit.toFixed(3)} A）`,
+      );
+    }
+  }
+
+  async calculateCommand(config, context) {
+    if (!this.usingPython) {
+      return {
+        voltage: calculateVoltage(context.A, context.T, context.t),
+        current: config.currentLimit,
+      };
+    }
+
+    return this.runPythonOperation(() => this.pythonControl.evaluate(context, {
+      maxVoltage: config.deviceMaxVoltage,
+      maxCurrent: Math.min(config.currentLimit, config.deviceMaxCurrent),
+    }));
+  }
+
+  async runPythonOperation(operation) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (this.stopRequested && !this.fatalError) {
+        throw new ExperimentStoppedError(this.stopReason);
+      }
+      throw error;
     }
   }
 
@@ -298,7 +376,7 @@ export class ExperimentController extends EventTarget {
       aIndex: context.aIndex,
       aCount: context.aCount,
       commandVoltage: state.setVoltage,
-      commandCurrent: context.currentLimit,
+      commandCurrent: context.commandCurrent,
       measuredVoltage: state.measuredVoltage,
       measuredCurrent: state.measuredCurrent,
       measuredPower: state.measuredPower,

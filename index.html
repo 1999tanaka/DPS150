@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#07111d">
-  <meta name="description" content="FNIRSI DPS-150をWeb Serialで制御し、正弦波状の電圧シーケンスを自動実行するローカル制御アプリ">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
-  <title>FNIRSI DPS-150 Auto Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260825.7">
+  <meta name="description" content="FNIRSI DPS-150の電圧・電流指令をブラウザ内PythonとWeb Serialで自動制御するローカル制御アプリ">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>FNIRSI DPS-150 Python Wave Control</title>
+  <link rel="stylesheet" href="css/style.css?v=20260825.8">
 </head>
 <body>
   <noscript>
@@ -19,7 +19,7 @@
       <div class="brand-mark" aria-hidden="true">DPS</div>
       <div>
         <p class="eyebrow">FNIRSI DPS-150</p>
-        <h1>Auto Wave Control</h1>
+        <h1>Python Wave Control</h1>
       </div>
     </div>
     <div class="header-states" aria-label="機器状態">
@@ -83,12 +83,12 @@
         </div>
 
         <div class="form-section critical-setting">
-          <label for="current-limit">Current Limit <span class="required">必須</span></label>
+          <label for="current-limit">Python Current Safety Max <span class="required">必須</span></label>
           <div class="input-with-unit">
             <input id="current-limit" name="currentLimit" type="number" min="0.001" max="5" step="0.001" placeholder="1.000" inputmode="decimal" required>
             <span>A</span>
           </div>
-          <p class="field-help">試験対象に適した安全な上限を入力してください。</p>
+          <p class="field-help">Pythonが返す電流指令の絶対上限です。試験対象に適した値を入力してください。</p>
         </div>
 
         <fieldset class="form-section">
@@ -152,8 +152,41 @@
           </label>
         </div>
 
+        <section class="python-editor-section" aria-labelledby="python-editor-title">
+          <div class="python-editor-heading">
+            <div>
+              <span class="equation-label">BROWSER PYTHON</span>
+              <h3 id="python-editor-title">Control function</h3>
+            </div>
+            <span id="python-runtime-badge" class="python-runtime-badge">Pyodide 314.0.6</span>
+          </div>
+          <p class="python-editor-help">
+            各更新点で <code>control(t, A, T, cycle)</code> を実行します。戻り値の電圧・電流は送信前に安全範囲を検査します。
+          </p>
+          <label class="python-code-label" for="python-code">control.py</label>
+          <textarea id="python-code" name="pythonSource" class="python-code" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off">import math
+
+def control(t, A, T, cycle):
+    voltage = (
+        (7 + A / 2)
+        + (7 - A / 2)
+        * math.sin(2 * math.pi * t / T)
+    )
+    current = 0.100
+    return {"voltage": voltage, "current": current}</textarea>
+          <div class="python-editor-footer">
+            <span id="python-status" class="python-status" role="status">Not checked</span>
+            <button id="check-python" class="button button-secondary python-check" type="button">CHECK PYTHON</button>
+          </div>
+          <p class="python-contract">
+            <strong>Inputs:</strong> t = 現在の周期条件での経過秒、A、T [s]、cycle。
+            <strong>Output:</strong> <code>{"voltage": V, "current": A}</code> または <code>(V, A)</code>。
+            標準ライブラリのみ使用できます。
+          </p>
+        </section>
+
         <div class="equation-card" aria-label="出力電圧の計算式">
-          <span class="equation-label">WAVEFORM</span>
+          <span class="equation-label">DEFAULT PYTHON WAVEFORM</span>
           <span class="equation">V(t) = (7 + A/2) + (7 − A/2) sin(2πt/T)</span>
           <span id="voltage-range" class="equation-range">Expected range 2.00—14.00 V</span>
         </div>
@@ -183,7 +216,7 @@
         </div>
 
         <div id="status-message" class="status-message status-info" role="status" aria-live="polite">
-          DPS-150を接続し、Current Limitを設定してください。
+          DPS-150を接続し、Python Current Safety Maxを設定してください。
         </div>
 
         <div class="sequence-strip">
@@ -332,11 +365,12 @@
         <div><dt>Periods</dt><dd id="confirm-periods">1 / 5 / 10 sec</dd></div>
         <div><dt>Cycles</dt><dd id="confirm-cycles">3 each</dd></div>
         <div><dt>Duration</dt><dd id="confirm-duration">01:36:48</dd></div>
-        <div class="confirm-critical"><dt>Current Limit</dt><dd id="confirm-current">— A</dd></div>
+        <div><dt>Control</dt><dd id="confirm-control">Browser Python</dd></div>
+        <div class="confirm-critical"><dt>Current Safety Max</dt><dd id="confirm-current">— A</dd></div>
       </dl>
       <label class="safety-confirmation">
         <input id="safety-confirm" type="checkbox">
-        <span>配線とCurrent Limitを確認しました</span>
+        <span>配線とPython Current Safety Maxを確認しました</span>
       </label>
       <div class="dialog-actions">
         <button class="button button-secondary" value="cancel" type="submit">CANCEL</button>
@@ -345,6 +379,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260825.7"></script>
+  <script type="module" src="js/main.js?v=20260825.8"></script>
 </body>
 </html>
