@@ -8,6 +8,25 @@ const COLORS = Object.freeze({
   empty: "#506777",
 });
 
+const LIVE_LEAD_SECONDS = 1;
+
+export function resolveWindowSeconds(period) {
+  if (period <= 1) return 10;
+  if (period <= 5) return 20;
+  return 30;
+}
+
+export function resolveTimeAxis(latestTime, windowSeconds) {
+  const safeLatestTime = Math.max(0, Number.isFinite(latestTime) ? latestTime : 0);
+  const xMax = safeLatestTime + LIVE_LEAD_SECONDS;
+  const xMin = xMax - windowSeconds;
+  const ticks = [];
+  const firstTick = Math.max(0, Math.ceil(xMin));
+  const lastTick = Math.floor(xMax);
+  for (let time = firstTick; time <= lastTick; time += 1) ticks.push(time);
+  return { xMin, xMax, ticks };
+}
+
 function niceCeiling(value) {
   if (!Number.isFinite(value) || value <= 0) return 1;
   const exponent = Math.floor(Math.log10(value));
@@ -19,7 +38,7 @@ function niceCeiling(value) {
 
 class LiveGraph {
   constructor(canvas, {
-    maxPoints = 2_000,
+    maxPoints = 10_000,
     windowSeconds = 30,
     fixedYMax = null,
     minimumYMax = 1,
@@ -50,9 +69,7 @@ class LiveGraph {
   }
 
   setPeriod(period) {
-    if (period <= 1) this.windowSeconds = 10;
-    else if (period <= 5) this.windowSeconds = 30;
-    else this.windowSeconds = 60;
+    this.windowSeconds = resolveWindowSeconds(period);
     this.requestDraw();
     return this.windowSeconds;
   }
@@ -66,7 +83,11 @@ class LiveGraph {
     }
     this.points.push(normalized);
     if (this.points.length > this.maxPoints) {
-      this.points.splice(0, this.points.length - this.maxPoints);
+      // Trim in batches so a long 10 ms run does not shift a 10,000-item
+      // array on every single sample after the buffer becomes full.
+      const overflow = this.points.length - this.maxPoints;
+      const trimCount = Math.max(overflow, Math.floor(this.maxPoints * 0.1));
+      this.points.splice(0, trimCount);
     }
     this.requestDraw();
   }
@@ -113,8 +134,7 @@ class LiveGraph {
     const plotWidth = Math.max(1, width - margin.left - margin.right);
     const plotHeight = Math.max(1, height - margin.top - margin.bottom);
     const latestTime = this.points.at(-1)?.time ?? 0;
-    const xMax = Math.max(this.windowSeconds, latestTime);
-    const xMin = xMax - this.windowSeconds;
+    const { xMin, xMax, ticks } = resolveTimeAxis(latestTime, this.windowSeconds);
     const visiblePoints = this.points.filter((point) => point.time >= xMin - 1);
     const yMin = 0;
     const yMax = this.resolveYMax(visiblePoints);
@@ -141,15 +161,14 @@ class LiveGraph {
       ctx.fillText(value.toFixed(yDigits), margin.left - 8, y);
     }
 
-    for (let tick = 0; tick <= 6; tick += 1) {
-      const time = xMin + (this.windowSeconds * tick) / 6;
+    for (const time of ticks) {
       const x = xToCanvas(time);
       ctx.beginPath();
       ctx.moveTo(x, margin.top);
       ctx.lineTo(x, height - margin.bottom);
       ctx.stroke();
-      ctx.textAlign = tick === 0 ? "left" : tick === 6 ? "right" : "center";
-      ctx.fillText(`${Math.max(0, time).toFixed(0)}`, x, height - 12);
+      ctx.textAlign = "center";
+      ctx.fillText(`${time}`, x, height - 12);
     }
 
     if (this.points.length === 0) {
@@ -163,6 +182,27 @@ class LiveGraph {
     for (const { key, color, lineWidth } of this.series) {
       this.drawSeries(visiblePoints, key, color, xToCanvas, yToCanvas, lineWidth);
     }
+
+    this.drawLiveEdge(visiblePoints.at(-1), xToCanvas);
+  }
+
+  drawLiveEdge(latestPoint, xToCanvas) {
+    if (!latestPoint) return;
+    const x = xToCanvas(latestPoint.time);
+    const ctx = this.context;
+    ctx.save();
+    ctx.setLineDash([3, 4]);
+    ctx.strokeStyle = "rgba(55, 214, 207, 0.42)";
+    ctx.beginPath();
+    ctx.moveTo(x, 14);
+    ctx.lineTo(x, this.canvas.clientHeight - 27);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = COLORS.commandVoltage;
+    ctx.textAlign = "center";
+    ctx.font = '700 8px "Cascadia Mono", Consolas, monospace';
+    ctx.fillText("LIVE", x, 8);
+    ctx.restore();
   }
 
   drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth) {

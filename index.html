@@ -7,7 +7,7 @@
   <meta name="description" content="FNIRSI DPS-150をWeb Serialで制御し、正弦波状の電圧シーケンスを自動実行するローカル制御アプリ">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
   <title>FNIRSI DPS-150 Auto Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260825.4">
+  <link rel="stylesheet" href="css/style.css?v=20260825.5">
 </head>
 <body>
   <noscript>
@@ -277,8 +277,8 @@
           <span class="axis-label axis-x">TIME [s]</span>
         </div>
         <div class="graph-footer">
-          <span id="graph-window">Window 30 s</span>
-          <span>Buffer max. 2,000 points</span>
+          <span id="graph-window">Window 30 s · 1 s ticks</span>
+          <span>Buffer max. 10,000 points</span>
           <button id="download-csv" class="text-button" type="button" disabled>DOWNLOAD CSV ↓</button>
         </div>
       </div>
@@ -300,8 +300,8 @@
           <span class="axis-label axis-x">TIME [s]</span>
         </div>
         <div class="graph-footer">
-          <span id="current-graph-window">Window 30 s</span>
-          <span>Auto scale · Buffer max. 2,000 points</span>
+          <span id="current-graph-window">Window 30 s · 1 s ticks</span>
+          <span>Auto scale · Buffer max. 10,000 points</span>
         </div>
       </div>
 
@@ -343,6 +343,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260825.4"></script>
+  <script type="module" src="js/main.js?v=20260825.5"></script>
 </body>
 </html>

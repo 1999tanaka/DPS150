@@ -1,12 +1,12 @@
-import { DPS150 } from "./dps150.js?v=20260825.4";
-import { ExperimentController } from "./experiment.js?v=20260825.4";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.4";
-import { ExperimentLogger } from "./logger.js?v=20260825.4";
+import { DPS150 } from "./dps150.js?v=20260825.5";
+import { ExperimentController } from "./experiment.js?v=20260825.5";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.5";
+import { ExperimentLogger } from "./logger.js?v=20260825.5";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js?v=20260825.4";
+} from "./waveform.js?v=20260825.5";
 
 const byId = (id) => document.getElementById(id);
 
@@ -347,10 +347,10 @@ experiment.addEventListener("segment", (event) => {
   const voltageWindowSeconds = voltageGraph.setPeriod(T);
   const currentWindowSeconds = currentGraph?.setPeriod(T);
   if (elements.voltageGraphWindow) {
-    elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s`;
+    elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s · 1 s ticks`;
   }
   if (elements.currentGraphWindow && currentWindowSeconds) {
-    elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s`;
+    elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s · 1 s ticks`;
   }
 });
 

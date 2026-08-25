@@ -1,4 +1,4 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.4";
+import { calculateVoltage } from "./waveform.js?v=20260825.5";
 
 const TELEMETRY_STALE_MS = 3_000;
 
