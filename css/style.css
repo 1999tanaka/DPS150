@@ -743,7 +743,7 @@ select {
 
 .telemetry-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 
@@ -774,6 +774,14 @@ select {
 
 .measured-card::before {
   background: var(--orange);
+}
+
+.current-command-card::before {
+  background: var(--blue);
+}
+
+.current-measured-card::before {
+  background: var(--lime);
 }
 
 .telemetry-index {
@@ -807,6 +815,14 @@ select {
 
 .measured-card strong {
   color: #ffd08c;
+}
+
+.current-command-card strong {
+  color: #8bc0ff;
+}
+
+.current-measured-card strong {
+  color: #c7ef87;
 }
 
 .telemetry-card > div span {
@@ -851,6 +867,14 @@ select {
   background: var(--orange);
 }
 
+.legend-current-command {
+  background: var(--blue);
+}
+
+.legend-current-measured {
+  background: var(--lime);
+}
+
 .canvas-wrap {
   position: relative;
   height: clamp(230px, 31vw, 360px);
@@ -858,13 +882,21 @@ select {
   padding: 0 0 23px 32px;
 }
 
-#voltage-graph {
+.live-graph {
   display: block;
   width: 100%;
   height: 100%;
   border: 1px solid rgba(31, 50, 67, 0.82);
   border-radius: 7px;
   background: #061019;
+}
+
+.current-graph-panel {
+  min-height: 320px;
+}
+
+.current-canvas-wrap {
+  height: clamp(210px, 26vw, 310px);
 }
 
 .axis-label {

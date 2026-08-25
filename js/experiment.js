@@ -121,6 +121,7 @@ export class ExperimentController extends EventTarget {
               aIndex,
               aCount: config.aValues.length,
               commandVoltage,
+              commandCurrent: config.currentLimit,
               measuredVoltage: telemetry.measuredVoltage,
               measuredCurrent: telemetry.measuredCurrent,
               measuredPower: telemetry.measuredPower,

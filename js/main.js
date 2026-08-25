@@ -1,6 +1,6 @@
 import { DPS150 } from "./dps150.js";
 import { ExperimentController } from "./experiment.js";
-import { VoltageGraph } from "./graph.js";
+import { CurrentGraph, VoltageGraph } from "./graph.js";
 import { ExperimentLogger } from "./logger.js";
 import {
   calculateVoltageRange,
@@ -46,10 +46,13 @@ const elements = {
   finishTime: byId("finish-time"),
   commandVoltage: byId("command-voltage"),
   measuredVoltage: byId("measured-voltage"),
+  commandCurrent: byId("command-current"),
   measuredCurrent: byId("measured-current"),
   measuredPower: byId("measured-power"),
-  graphCanvas: byId("voltage-graph"),
-  graphWindow: byId("graph-window"),
+  voltageGraphCanvas: byId("voltage-graph"),
+  currentGraphCanvas: byId("current-graph"),
+  voltageGraphWindow: byId("voltage-graph-window"),
+  currentGraphWindow: byId("current-graph-window"),
   downloadCsv: byId("download-csv"),
   startDialog: byId("start-dialog"),
   safetyConfirm: byId("safety-confirm"),
@@ -63,7 +66,8 @@ const elements = {
 
 const device = new DPS150();
 const logger = new ExperimentLogger();
-const graph = new VoltageGraph(elements.graphCanvas);
+const voltageGraph = new VoltageGraph(elements.voltageGraphCanvas);
+const currentGraph = new CurrentGraph(elements.currentGraphCanvas);
 const experiment = new ExperimentController(device, logger);
 
 let pendingConfig = null;
@@ -155,6 +159,7 @@ function updateDeviceState(state = device.getState()) {
 
   elements.outputState.textContent = state.outputEnabled ? "ON" : "OFF";
   elements.outputState.className = `output-badge ${state.outputEnabled ? "output-on" : "output-off"}`;
+  elements.commandCurrent.textContent = numericText(state.setCurrent, 3);
   updateButtons();
 }
 
@@ -249,7 +254,8 @@ function openStartConfirmation() {
 
 async function runExperiment(config) {
   activeConfig = config;
-  graph.clear();
+  voltageGraph.clear();
+  currentGraph.clear();
   setFormDisabled(true);
   elements.startButton.disabled = true;
   elements.stopButton.disabled = false;
@@ -332,8 +338,10 @@ experiment.addEventListener("started", () => {
 
 experiment.addEventListener("segment", (event) => {
   const { T } = event.detail;
-  const windowSeconds = graph.setPeriod(T);
-  elements.graphWindow.textContent = `Window ${windowSeconds} s`;
+  const voltageWindowSeconds = voltageGraph.setPeriod(T);
+  const currentWindowSeconds = currentGraph.setPeriod(T);
+  elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s`;
+  elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s`;
 });
 
 experiment.addEventListener("progress", (event) => {
@@ -343,14 +351,20 @@ experiment.addEventListener("progress", (event) => {
   elements.currentCycle.textContent = `${sample.cycle} / ${activeConfig?.cycles ?? "—"}`;
   elements.currentStep.textContent = `${sample.aIndex + 1} / ${sample.aCount}`;
   elements.commandVoltage.textContent = sample.commandVoltage.toFixed(3);
+  elements.commandCurrent.textContent = sample.commandCurrent.toFixed(3);
   elements.elapsedTime.textContent = formatDuration(sample.elapsedSeconds);
   elements.remainingTime.textContent = formatDuration(sample.remainingSeconds);
   elements.finishTime.textContent = finishClock(sample.remainingSeconds);
   setProgress(sample.progress);
-  graph.addPoint({
+  voltageGraph.addPoint({
     time: sample.elapsedSeconds,
     commandVoltage: sample.commandVoltage,
     measuredVoltage: sample.measuredVoltage,
+  });
+  currentGraph.addPoint({
+    time: sample.elapsedSeconds,
+    commandCurrent: sample.commandCurrent,
+    measuredCurrent: sample.measuredCurrent,
   });
 });
 

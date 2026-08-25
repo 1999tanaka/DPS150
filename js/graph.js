@@ -1,21 +1,42 @@
 const COLORS = Object.freeze({
   grid: "rgba(80, 110, 128, 0.22)",
-  axis: "#587083",
-  command: "#37d6cf",
-  measured: "#ffb347",
+  commandVoltage: "#37d6cf",
+  measuredVoltage: "#ffb347",
+  commandCurrent: "#60a5fa",
+  measuredCurrent: "#a8df4f",
   label: "#7890a1",
   empty: "#506777",
 });
 
-export class VoltageGraph {
-  constructor(canvas, { maxPoints = 2_000, windowSeconds = 30 } = {}) {
+function niceCeiling(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  const exponent = Math.floor(Math.log10(value));
+  const magnitude = 10 ** exponent;
+  const normalized = value / magnitude;
+  const factor = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return factor * magnitude;
+}
+
+class LiveGraph {
+  constructor(canvas, {
+    maxPoints = 2_000,
+    windowSeconds = 30,
+    fixedYMax = null,
+    minimumYMax = 1,
+    series = [],
+    emptyLabel = "WAITING FOR EXPERIMENT DATA",
+  } = {}) {
     if (!(canvas instanceof HTMLCanvasElement)) {
-      throw new TypeError("VoltageGraph requires a canvas element.");
+      throw new TypeError("LiveGraph requires a canvas element.");
     }
     this.canvas = canvas;
     this.context = canvas.getContext("2d");
     this.maxPoints = maxPoints;
     this.windowSeconds = windowSeconds;
+    this.fixedYMax = fixedYMax;
+    this.minimumYMax = minimumYMax;
+    this.series = series;
+    this.emptyLabel = emptyLabel;
     this.points = [];
     this.frameRequested = false;
     this.resizeObserver = new ResizeObserver(() => this.requestDraw());
@@ -37,12 +58,13 @@ export class VoltageGraph {
   }
 
   addPoint(point) {
-    if (!Number.isFinite(point.time) || !Number.isFinite(point.commandVoltage)) return;
-    this.points.push({
-      time: point.time,
-      commandVoltage: point.commandVoltage,
-      measuredVoltage: Number.isFinite(point.measuredVoltage) ? point.measuredVoltage : null,
-    });
+    if (!Number.isFinite(point.time)) return;
+    if (!this.series.some(({ key }) => Number.isFinite(point[key]))) return;
+    const normalized = { time: point.time };
+    for (const { key } of this.series) {
+      normalized[key] = Number.isFinite(point[key]) ? point[key] : null;
+    }
+    this.points.push(normalized);
     if (this.points.length > this.maxPoints) {
       this.points.splice(0, this.points.length - this.maxPoints);
     }
@@ -73,17 +95,30 @@ export class VoltageGraph {
     return { width, height };
   }
 
+  resolveYMax(visiblePoints) {
+    if (Number.isFinite(this.fixedYMax)) return this.fixedYMax;
+    let observedMax = this.minimumYMax;
+    for (const point of visiblePoints) {
+      for (const { key } of this.series) {
+        if (Number.isFinite(point[key])) observedMax = Math.max(observedMax, point[key]);
+      }
+    }
+    return niceCeiling(observedMax * 1.1);
+  }
+
   draw() {
     const ctx = this.context;
     const { width, height } = this.prepareCanvas();
-    const margin = { top: 14, right: 14, bottom: 27, left: 42 };
+    const margin = { top: 14, right: 14, bottom: 27, left: 48 };
     const plotWidth = Math.max(1, width - margin.left - margin.right);
     const plotHeight = Math.max(1, height - margin.top - margin.bottom);
-    const yMin = 0;
-    const yMax = 15;
     const latestTime = this.points.at(-1)?.time ?? 0;
     const xMax = Math.max(this.windowSeconds, latestTime);
     const xMin = xMax - this.windowSeconds;
+    const visiblePoints = this.points.filter((point) => point.time >= xMin - 1);
+    const yMin = 0;
+    const yMax = this.resolveYMax(visiblePoints);
+    const yDigits = yMax < 0.1 ? 3 : yMax < 1 ? 2 : yMax < 10 ? 1 : 0;
 
     ctx.clearRect(0, 0, width, height);
     ctx.lineWidth = 1;
@@ -96,14 +131,14 @@ export class VoltageGraph {
     ctx.strokeStyle = COLORS.grid;
     ctx.fillStyle = COLORS.label;
     for (let tick = 0; tick <= 5; tick += 1) {
-      const voltage = yMin + ((yMax - yMin) * tick) / 5;
-      const y = yToCanvas(voltage);
+      const value = yMin + ((yMax - yMin) * tick) / 5;
+      const y = yToCanvas(value);
       ctx.beginPath();
       ctx.moveTo(margin.left, y);
       ctx.lineTo(width - margin.right, y);
       ctx.stroke();
       ctx.textAlign = "right";
-      ctx.fillText(voltage.toFixed(0), margin.left - 8, y);
+      ctx.fillText(value.toFixed(yDigits), margin.left - 8, y);
     }
 
     for (let tick = 0; tick <= 6; tick += 1) {
@@ -121,13 +156,13 @@ export class VoltageGraph {
       ctx.fillStyle = COLORS.empty;
       ctx.textAlign = "center";
       ctx.font = '11px "Cascadia Mono", Consolas, monospace';
-      ctx.fillText("WAITING FOR EXPERIMENT DATA", margin.left + plotWidth / 2, margin.top + plotHeight / 2);
+      ctx.fillText(this.emptyLabel, margin.left + plotWidth / 2, margin.top + plotHeight / 2);
       return;
     }
 
-    const visiblePoints = this.points.filter((point) => point.time >= xMin - 1);
-    this.drawSeries(visiblePoints, "commandVoltage", COLORS.command, xToCanvas, yToCanvas, 1.8);
-    this.drawSeries(visiblePoints, "measuredVoltage", COLORS.measured, xToCanvas, yToCanvas, 1.45);
+    for (const { key, color, lineWidth } of this.series) {
+      this.drawSeries(visiblePoints, key, color, xToCanvas, yToCanvas, lineWidth);
+    }
   }
 
   drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth) {
@@ -158,5 +193,31 @@ export class VoltageGraph {
 
   destroy() {
     this.resizeObserver.disconnect();
+  }
+}
+
+export class VoltageGraph extends LiveGraph {
+  constructor(canvas, options = {}) {
+    super(canvas, {
+      ...options,
+      fixedYMax: 15,
+      series: [
+        { key: "commandVoltage", color: COLORS.commandVoltage, lineWidth: 1.8 },
+        { key: "measuredVoltage", color: COLORS.measuredVoltage, lineWidth: 1.45 },
+      ],
+    });
+  }
+}
+
+export class CurrentGraph extends LiveGraph {
+  constructor(canvas, options = {}) {
+    super(canvas, {
+      ...options,
+      minimumYMax: 0.1,
+      series: [
+        { key: "commandCurrent", color: COLORS.commandCurrent, lineWidth: 1.8 },
+        { key: "measuredCurrent", color: COLORS.measuredCurrent, lineWidth: 1.45 },
+      ],
+    });
   }
 }

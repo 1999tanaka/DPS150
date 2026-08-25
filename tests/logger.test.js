@@ -11,6 +11,7 @@ test("CSV contains the experiment and telemetry fields", () => {
     T: 1,
     cycle: 1,
     commandVoltage: 9.854,
+    commandCurrent: 0.1,
     measuredVoltage: 9.79,
     measuredCurrent: 0.528,
     measuredPower: 5.169,
@@ -20,7 +21,7 @@ test("CSV contains the experiment and telemetry fields", () => {
   }]);
 
   assert.match(csv, /^timestamp,elapsed_s,A,T_s,cycle,command_v/);
-  assert.match(csv, /0\.050,2\.000,1\.000,1,9\.8540,9\.7900,0\.5280,5\.1690,CV,OK,1/);
+  assert.match(csv, /0\.050,2\.000,1\.000,1,9\.8540,0\.1000,9\.7900,0\.5280,5\.1690,CV,OK,1/);
 });
 
 test("logger enforces its memory cap", () => {

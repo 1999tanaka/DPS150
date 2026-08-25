@@ -243,8 +243,13 @@
           <span class="metric-label">MEASURED VOLTAGE</span>
           <div><strong id="measured-voltage">—</strong><span>V</span></div>
         </article>
-        <article class="telemetry-card">
-          <span class="telemetry-index">AMP</span>
+        <article class="telemetry-card current-command-card">
+          <span class="telemetry-index">LIM</span>
+          <span class="metric-label">CURRENT LIMIT</span>
+          <div><strong id="command-current">—</strong><span>A</span></div>
+        </article>
+        <article class="telemetry-card current-measured-card">
+          <span class="telemetry-index">OUT</span>
           <span class="metric-label">MEASURED CURRENT</span>
           <div><strong id="measured-current">—</strong><span>A</span></div>
         </article>
@@ -267,14 +272,36 @@
           </div>
         </div>
         <div class="canvas-wrap">
-          <canvas id="voltage-graph" aria-label="設定電圧と実測電圧のリアルタイムグラフ"></canvas>
+          <canvas id="voltage-graph" class="live-graph" aria-label="設定電圧と実測電圧のリアルタイムグラフ"></canvas>
           <span class="axis-label axis-y">VOLTAGE [V]</span>
           <span class="axis-label axis-x">TIME [s]</span>
         </div>
         <div class="graph-footer">
-          <span id="graph-window">Window 30 s</span>
+          <span id="voltage-graph-window">Window 30 s</span>
           <span>Buffer max. 2,000 points</span>
           <button id="download-csv" class="text-button" type="button" disabled>DOWNLOAD CSV ↓</button>
+        </div>
+      </div>
+
+      <div class="panel graph-panel current-graph-panel">
+        <div class="graph-header">
+          <div>
+            <p class="section-index">05 / LIVE CURRENT</p>
+            <h2>Current response</h2>
+          </div>
+          <div class="legend" aria-label="電流グラフ凡例">
+            <span><i class="legend-current-command"></i>Current Limit</span>
+            <span><i class="legend-current-measured"></i>Measured</span>
+          </div>
+        </div>
+        <div class="canvas-wrap current-canvas-wrap">
+          <canvas id="current-graph" class="live-graph" aria-label="電流制限値と実測電流のリアルタイムグラフ"></canvas>
+          <span class="axis-label axis-y">CURRENT [A]</span>
+          <span class="axis-label axis-x">TIME [s]</span>
+        </div>
+        <div class="graph-footer">
+          <span id="current-graph-window">Window 30 s</span>
+          <span>Auto scale · Buffer max. 2,000 points</span>
         </div>
       </div>
 
