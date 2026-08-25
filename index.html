@@ -7,7 +7,7 @@
   <meta name="description" content="FNIRSI DPS-150をWeb Serialで制御し、正弦波状の電圧シーケンスを自動実行するローカル制御アプリ">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
   <title>FNIRSI DPS-150 Auto Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260825.9">
+  <link rel="stylesheet" href="css/style.css?v=20260825.10">
 </head>
 <body>
   <noscript>
@@ -92,12 +92,12 @@
         </div>
 
         <div class="form-section formula-setting">
-          <label for="base-voltage">Formula Base B</label>
+          <label for="base-voltage">Maximum Voltage B</label>
           <div class="input-with-unit">
-            <input id="base-voltage" name="baseVoltage" type="number" min="0" step="0.1" value="7.0" inputmode="decimal" required>
+            <input id="base-voltage" name="maximumVoltageB" type="number" min="0.1" step="0.1" value="14.0" inputmode="decimal" required>
             <span>V</span>
           </div>
-          <p class="field-help">数式中の2つの「7」を共通して置き換える値です。</p>
+          <p class="field-help">波形の最大電圧です。数式中の「7」をB/2で置き換えます。</p>
         </div>
 
         <fieldset class="form-section">
@@ -163,8 +163,8 @@
 
         <div class="equation-card" aria-label="出力電圧の計算式">
           <span class="equation-label">WAVEFORM</span>
-          <span class="equation">V(t) = (B + A/2) + (B − A/2) sin(2πt/T)</span>
-          <span id="voltage-range" class="equation-range">Expected range 2.00—14.00 V · B = 7.0 V</span>
+          <span class="equation">V(t) = (B/2 + A/2) + (B/2 − A/2) sin(2πt/T)</span>
+          <span id="voltage-range" class="equation-range">Expected range 2.00—14.00 V · Maximum B = 14.0 V</span>
         </div>
 
         <div id="validation-message" class="validation-message" role="alert" hidden></div>
@@ -338,7 +338,7 @@
       <p class="dialog-lead">出力を開始する前に、配線・負荷・保護設定を確認してください。</p>
       <dl class="confirm-summary">
         <div><dt>A</dt><dd id="confirm-a">2.0 → 14.0 / 0.1</dd></div>
-        <div><dt>Formula Base B</dt><dd id="confirm-base-voltage">7.0 V</dd></div>
+        <div><dt>Maximum Voltage B</dt><dd id="confirm-base-voltage">14.0 V</dd></div>
         <div><dt>Periods</dt><dd id="confirm-periods">1 / 5 / 10 sec</dd></div>
         <div><dt>Cycles</dt><dd id="confirm-cycles">3 each</dd></div>
         <div><dt>Duration</dt><dd id="confirm-duration">01:36:48</dd></div>
@@ -355,6 +355,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260825.9"></script>
+  <script type="module" src="js/main.js?v=20260825.10"></script>
 </body>
 </html>

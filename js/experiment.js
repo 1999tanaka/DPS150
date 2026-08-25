@@ -1,4 +1,4 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.9";
+import { calculateVoltage } from "./waveform.js?v=20260825.10";
 
 const TELEMETRY_STALE_MS = 3_000;
 const HIGH_SPEED_MEASUREMENT_INTERVAL_MS = 50;
@@ -79,7 +79,7 @@ export class ExperimentController extends EventTarget {
         config.aValues[0],
         config.periods[0],
         0,
-        config.baseVoltage,
+        config.maximumVoltageB,
       );
       this.assertSafeVoltage(firstVoltage, config.deviceMaxVoltage);
       await this.device.setVoltage(firstVoltage);
@@ -98,7 +98,7 @@ export class ExperimentController extends EventTarget {
           const segmentStart = now();
           this.activeSegment = {
             A,
-            baseVoltage: config.baseVoltage,
+            maximumVoltageB: config.maximumVoltageB,
             T,
             aIndex,
             aCount: config.aValues.length,
@@ -115,7 +115,7 @@ export class ExperimentController extends EventTarget {
             if (segmentElapsed >= segmentDuration) break;
 
             const cycle = Math.min(config.cycles, Math.floor(segmentElapsed / T) + 1);
-            const commandVoltage = calculateVoltage(A, T, segmentElapsed, config.baseVoltage);
+            const commandVoltage = calculateVoltage(A, T, segmentElapsed, config.maximumVoltageB);
             this.assertSafeVoltage(commandVoltage, config.deviceMaxVoltage);
             await this.device.setVoltage(commandVoltage);
             this.throwIfStopped();
@@ -144,7 +144,7 @@ export class ExperimentController extends EventTarget {
               progress,
               remainingSeconds,
               A,
-              baseVoltage: config.baseVoltage,
+              maximumVoltageB: config.maximumVoltageB,
               T,
               cycle,
               aIndex,
@@ -300,7 +300,7 @@ export class ExperimentController extends EventTarget {
       elapsedSeconds,
       measurementElapsedSeconds: elapsedSeconds,
       A: context.A,
-      baseVoltage: context.baseVoltage,
+      maximumVoltageB: context.maximumVoltageB,
       T: context.T,
       cycle,
       aIndex: context.aIndex,

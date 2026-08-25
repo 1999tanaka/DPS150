@@ -15,10 +15,10 @@ test("loads the entry module with a cache-busting version", () => {
   assert.match(html, /src="js\/main\.js\?v=[^"]+"/);
 });
 
-test("exposes one editable Formula Base B for both former 7 constants", () => {
-  assert.match(html, /id="base-voltage"[^>]*value="7\.0"/);
-  assert.match(html, /V\(t\) = \(B \+ A\/2\) \+ \(B − A\/2\)/);
-  assert.match(main, /baseVoltage: elements\.baseVoltage\.value/);
+test("exposes Maximum Voltage B and substitutes B/2 for both former 7 constants", () => {
+  assert.match(html, /id="base-voltage"[^>]*value="14\.0"/);
+  assert.match(html, /V\(t\) = \(B\/2 \+ A\/2\) \+ \(B\/2 − A\/2\)/);
+  assert.match(main, /maximumVoltageB: elements\.maximumVoltageB\.value/);
 });
 
 test("allows current UI elements to be absent in a cached older document", () => {

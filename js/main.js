@@ -1,12 +1,12 @@
-import { DPS150 } from "./dps150.js?v=20260825.9";
-import { ExperimentController } from "./experiment.js?v=20260825.9";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.9";
-import { ExperimentLogger } from "./logger.js?v=20260825.9";
+import { DPS150 } from "./dps150.js?v=20260825.10";
+import { ExperimentController } from "./experiment.js?v=20260825.10";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.10";
+import { ExperimentLogger } from "./logger.js?v=20260825.10";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js?v=20260825.9";
+} from "./waveform.js?v=20260825.10";
 
 const byId = (id) => document.getElementById(id);
 
@@ -21,7 +21,7 @@ const elements = {
   connectButton: byId("connect-button"),
   settingsForm: byId("settings-form"),
   currentLimit: byId("current-limit"),
-  baseVoltage: byId("base-voltage"),
+  maximumVoltageB: byId("base-voltage"),
   aStart: byId("a-start"),
   aEnd: byId("a-end"),
   aStep: byId("a-step"),
@@ -86,7 +86,7 @@ let activeRunPromise = null;
 function readFormValues() {
   return {
     currentLimit: elements.currentLimit.value,
-    baseVoltage: elements.baseVoltage.value,
+    maximumVoltageB: elements.maximumVoltageB.value,
     aStart: elements.aStart.value,
     aEnd: elements.aEnd.value,
     aStep: elements.aStep.value,
@@ -190,7 +190,7 @@ function updatePreview() {
   let config;
   try {
     config = getConfig({ preview: true });
-    elements.voltageRange.textContent = `Expected range ${config.waveformMin.toFixed(2)}—${config.waveformMax.toFixed(2)} V · B = ${config.baseVoltage.toFixed(1)} V`;
+    elements.voltageRange.textContent = `Expected range ${config.waveformMin.toFixed(2)}—${config.waveformMax.toFixed(2)} V · Maximum B = ${config.maximumVoltageB.toFixed(1)} V`;
     elements.remainingTime.textContent = formatDuration(config.totalDuration);
     elements.aTotal.textContent = `/ ${config.aEnd.toFixed(1)}`;
     elements.currentStep.textContent = `0 / ${config.aValues.length}`;
@@ -198,10 +198,10 @@ function updatePreview() {
   } catch {
     const start = Number(elements.aStart.value);
     const end = Number(elements.aEnd.value);
-    const baseVoltage = Number(elements.baseVoltage.value);
-    if (Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(baseVoltage)) {
-      const startRange = calculateVoltageRange(start, baseVoltage);
-      const endRange = calculateVoltageRange(end, baseVoltage);
+    const maximumVoltageB = Number(elements.maximumVoltageB.value);
+    if (Number.isFinite(start) && Number.isFinite(end) && Number.isFinite(maximumVoltageB)) {
+      const startRange = calculateVoltageRange(start, maximumVoltageB);
+      const endRange = calculateVoltageRange(end, maximumVoltageB);
       elements.voltageRange.textContent = `Expected range ${Math.min(startRange.min, endRange.min).toFixed(2)}—${Math.max(startRange.max, endRange.max).toFixed(2)} V`;
     } else {
       elements.voltageRange.textContent = "Check waveform settings";
@@ -259,7 +259,7 @@ function openStartConfirmation() {
   }
 
   elements.confirmA.textContent = `${pendingConfig.aStart.toFixed(1)} → ${pendingConfig.aEnd.toFixed(1)} / ${pendingConfig.aStep.toFixed(1)}`;
-  elements.confirmBaseVoltage.textContent = `${pendingConfig.baseVoltage.toFixed(1)} V`;
+  elements.confirmBaseVoltage.textContent = `${pendingConfig.maximumVoltageB.toFixed(1)} V`;
   elements.confirmPeriods.textContent = `${pendingConfig.periods.join(" / ")} sec`;
   elements.confirmCycles.textContent = `${pendingConfig.cycles} each`;
   elements.confirmDuration.textContent = formatDuration(pendingConfig.totalDuration);
