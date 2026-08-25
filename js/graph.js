@@ -178,8 +178,23 @@ class LiveGraph {
       return;
     }
 
-    for (const { key, color, lineWidth, showPoints = false } of this.series) {
-      this.drawSeries(visiblePoints, key, color, xToCanvas, yToCanvas, lineWidth, showPoints);
+    for (const {
+      key,
+      color,
+      lineWidth,
+      showPoints = false,
+      connectPoints = true,
+    } of this.series) {
+      this.drawSeries(
+        visiblePoints,
+        key,
+        color,
+        xToCanvas,
+        yToCanvas,
+        lineWidth,
+        showPoints,
+        connectPoints,
+      );
     }
 
     this.drawLiveEdge(visiblePoints.at(-1), xToCanvas);
@@ -204,7 +219,7 @@ class LiveGraph {
     ctx.restore();
   }
 
-  drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth, showPoints) {
+  drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth, showPoints, connectPoints) {
     const ctx = this.context;
     let drawing = false;
     const plottedPoints = [];
@@ -222,11 +237,13 @@ class LiveGraph {
         ctx.lineTo(x, y);
       }
     }
-    ctx.strokeStyle = color;
-    ctx.lineWidth = lineWidth;
-    ctx.lineJoin = "round";
-    ctx.lineCap = "round";
-    ctx.stroke();
+    if (connectPoints) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = lineWidth;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.stroke();
+    }
 
     if (showPoints) {
       ctx.fillStyle = color;
@@ -250,7 +267,13 @@ export class VoltageGraph extends LiveGraph {
       fixedYMax: 15,
       series: [
         { key: "commandVoltage", color: COLORS.commandVoltage, lineWidth: 1.8 },
-        { key: "measuredVoltage", color: COLORS.measuredVoltage, lineWidth: 1.45, showPoints: true },
+        {
+          key: "measuredVoltage",
+          color: COLORS.measuredVoltage,
+          lineWidth: 1.45,
+          showPoints: true,
+          connectPoints: false,
+        },
       ],
     });
   }
@@ -263,7 +286,13 @@ export class CurrentGraph extends LiveGraph {
       minimumYMax: 0.1,
       series: [
         { key: "commandCurrent", color: COLORS.commandCurrent, lineWidth: 1.8 },
-        { key: "measuredCurrent", color: COLORS.measuredCurrent, lineWidth: 1.45, showPoints: true },
+        {
+          key: "measuredCurrent",
+          color: COLORS.measuredCurrent,
+          lineWidth: 1.45,
+          showPoints: true,
+          connectPoints: false,
+        },
       ],
     });
   }

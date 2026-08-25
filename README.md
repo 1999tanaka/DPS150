@@ -57,10 +57,12 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - OUTPUT ON/OFFの機器応答確認と、未確認時の状態読出し・1回再送
 - Command / Measured Voltageの30秒固定Canvasリアルタイムグラフ（最大10,000点）
 - Current Limit / Measured Currentの30秒固定・自動スケールCanvasグラフ（最大10,000点）
-- DPS-150から届いた実測点のみを表示し、点間を直線補間（生データ更新レートも表示）
+- レジスタ0xC3を50 ms周期（目標20 Hz）で明示読出し
+- DPS-150から届いた実測点のみを受信時刻で表示し、実測点間は補間・接続しない
+- 実測の生データ更新レートを画面表示
 - Command / Measuredの電圧・電流数値、Measured Power、進捗・残り時間表示
 - Wake Lock（利用可能なブラウザのみ）とページ離脱警告
-- Current Limitと実測サンプル番号を含む最大250,000件の実験ログとCSVダウンロード
+- 指令行と実測行を区別し、受信時刻・実測サンプル番号を含む最大250,000件のCSVログ
 - 外部CDN、外部API、サーバー側データベース不使用
 
 ## ファイル構成
@@ -100,6 +102,8 @@ F1 <command> <register> <length> <data...> <checksum>
 Current Limit、初期電圧、OUTPUT ON等の制御遷移には60 msのコマンド間隔を設けています。波形更新中は選択したUpdate Intervalを使用します。
 
 通信レジスタとフレーム形式は、cho45氏のMITライセンス実装 [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) を参考にしています。詳細は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。プロトコルは非公式のリバースエンジニアリング情報であり、FNIRSI公式仕様ではありません。
+
+実測V/I/Pの20 Hz読出しは、実機向けロガーで同じ`0xC3`を50 ms周期・最大約20 Hzとしている [cajunpanda/dps150](https://github.com/cajunpanda/dps150/blob/main/dps150.py#L433-L476) も参考にしています。本アプリでは実際の受信Hzを画面表示し、機器・ファームウェアごとの差を実機で確認できるようにしています。
 
 ## 開発と確認
 

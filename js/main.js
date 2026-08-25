@@ -1,12 +1,12 @@
-import { DPS150 } from "./dps150.js?v=20260825.6";
-import { ExperimentController } from "./experiment.js?v=20260825.6";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.6";
-import { ExperimentLogger } from "./logger.js?v=20260825.6";
+import { DPS150 } from "./dps150.js?v=20260825.7";
+import { ExperimentController } from "./experiment.js?v=20260825.7";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.7";
+import { ExperimentLogger } from "./logger.js?v=20260825.7";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js?v=20260825.6";
+} from "./waveform.js?v=20260825.7";
 
 const byId = (id) => document.getElementById(id);
 
@@ -80,7 +80,6 @@ let pendingConfig = null;
 let activeConfig = null;
 let connectionBusy = false;
 let activeRunPromise = null;
-let lastGraphedMeasurementSequence = null;
 
 function readFormValues() {
   return {
@@ -177,8 +176,8 @@ function updateTelemetry(state = device.getState()) {
   elements.measuredCurrent.textContent = numericText(state.measuredCurrent, 3);
   elements.measuredPower.textContent = numericText(state.measuredPower, 3);
   const measurementRate = Number.isFinite(state.measurementRateHz)
-    ? `Measured raw ${state.measurementRateHz.toFixed(1)} Hz`
-    : "Measured raw — Hz";
+    ? `Measured raw ${state.measurementRateHz.toFixed(1)} Hz · target 20 Hz`
+    : "Measured raw — Hz · target 20 Hz";
   if (elements.voltageTelemetryRate) elements.voltageTelemetryRate.textContent = measurementRate;
   if (elements.currentTelemetryRate) elements.currentTelemetryRate.textContent = measurementRate;
   updateDeviceState(state);
@@ -268,7 +267,6 @@ function openStartConfirmation() {
 
 async function runExperiment(config) {
   activeConfig = config;
-  lastGraphedMeasurementSequence = null;
   voltageGraph.clear();
   currentGraph?.clear();
   setFormDisabled(true);
@@ -376,18 +374,25 @@ experiment.addEventListener("progress", (event) => {
   elements.remainingTime.textContent = formatDuration(sample.remainingSeconds);
   elements.finishTime.textContent = finishClock(sample.remainingSeconds);
   setProgress(sample.progress);
-  const freshMeasurement = Number.isFinite(sample.measurementSequence)
-    && sample.measurementSequence !== lastGraphedMeasurementSequence;
-  if (freshMeasurement) lastGraphedMeasurementSequence = sample.measurementSequence;
   voltageGraph.addPoint({
     time: sample.elapsedSeconds,
     commandVoltage: sample.commandVoltage,
-    measuredVoltage: freshMeasurement ? sample.measuredVoltage : null,
   });
   currentGraph?.addPoint({
     time: sample.elapsedSeconds,
     commandCurrent: sample.commandCurrent,
-    measuredCurrent: freshMeasurement ? sample.measuredCurrent : null,
+  });
+});
+
+experiment.addEventListener("measurement", (event) => {
+  const sample = event.detail;
+  voltageGraph.addPoint({
+    time: sample.measurementElapsedSeconds,
+    measuredVoltage: sample.measuredVoltage,
+  });
+  currentGraph?.addPoint({
+    time: sample.measurementElapsedSeconds,
+    measuredCurrent: sample.measuredCurrent,
   });
 });
 

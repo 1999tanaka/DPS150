@@ -1,6 +1,7 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.6";
+import { calculateVoltage } from "./waveform.js?v=20260825.7";
 
 const TELEMETRY_STALE_MS = 3_000;
+const HIGH_SPEED_MEASUREMENT_INTERVAL_MS = 50;
 
 function now() {
   return performance.now();
@@ -25,6 +26,11 @@ export class ExperimentController extends EventTarget {
     this.startedAt = 0;
     this.emergencyOffPromise = null;
     this.releaseDelay = null;
+    this.releaseMeasurementDelay = null;
+    this.measurementPolling = false;
+    this.measurementPollTask = null;
+    this.lastEmittedMeasurementSequence = null;
+    this.activeSegment = null;
     this.wakeLock = null;
 
     device.addEventListener("disconnect", (event) => {
@@ -40,6 +46,9 @@ export class ExperimentController extends EventTarget {
       if (this.running && protection) {
         this.abort(new Error(`DPS-150保護状態を検出しました: ${protection}`));
       }
+      if (this.running && Number.isFinite(event.detail?.update?.measuredVoltage)) {
+        this.captureMeasurement(event.detail.state);
+      }
     });
   }
 
@@ -52,6 +61,8 @@ export class ExperimentController extends EventTarget {
     this.fatalError = null;
     this.stopReason = "";
     this.emergencyOffPromise = null;
+    this.lastEmittedMeasurementSequence = null;
+    this.activeSegment = null;
     this.startedAt = now();
     this.logger.clear();
     await this.acquireWakeLock();
@@ -72,6 +83,7 @@ export class ExperimentController extends EventTarget {
       this.throwIfStopped();
       await this.device.outputOn();
       this.throwIfStopped();
+      this.startMeasurementPolling();
 
       for (let aIndex = 0; aIndex < config.aValues.length; aIndex += 1) {
         const A = config.aValues[aIndex];
@@ -79,6 +91,15 @@ export class ExperimentController extends EventTarget {
           this.throwIfStopped();
           const segmentDuration = T * config.cycles;
           const segmentStart = now();
+          this.activeSegment = {
+            A,
+            T,
+            aIndex,
+            aCount: config.aValues.length,
+            cycles: config.cycles,
+            currentLimit: config.currentLimit,
+            segmentStart,
+          };
           this.emit("segment", { A, T, aIndex, config });
 
           while (true) {
@@ -111,6 +132,7 @@ export class ExperimentController extends EventTarget {
               : Math.max(0, config.totalDuration - plannedElapsed);
 
             const sample = {
+              recordType: "command",
               elapsedSeconds,
               plannedElapsed,
               progress,
@@ -122,13 +144,14 @@ export class ExperimentController extends EventTarget {
               aCount: config.aValues.length,
               commandVoltage,
               commandCurrent: config.currentLimit,
-              measuredVoltage: telemetry.measuredVoltage,
-              measuredCurrent: telemetry.measuredCurrent,
-              measuredPower: telemetry.measuredPower,
+              measuredVoltage: null,
+              measuredCurrent: null,
+              measuredPower: null,
               mode: telemetry.mode,
               protectionState: telemetry.protectionState,
               outputEnabled: telemetry.outputEnabled,
-              measurementSequence: telemetry.measurementSequence,
+              measurementSequence: null,
+              measurementElapsedSeconds: null,
             };
             this.logger.add(sample);
             this.emit("progress", sample);
@@ -143,6 +166,7 @@ export class ExperimentController extends EventTarget {
         }
       }
 
+      await this.stopMeasurementPolling();
       await this.device.outputOff();
       const elapsedSeconds = (now() - this.startedAt) / 1_000;
       this.emit("completed", {
@@ -184,6 +208,7 @@ export class ExperimentController extends EventTarget {
       });
       throw failure;
     } finally {
+      await this.stopMeasurementPolling();
       try {
         await (this.emergencyOffPromise ?? this.device.outputOff());
       } catch {
@@ -191,6 +216,7 @@ export class ExperimentController extends EventTarget {
       }
       this.running = false;
       this.stopRequested = false;
+      this.activeSegment = null;
       this.releaseDelay?.();
       this.releaseDelay = null;
       await this.releaseWakeLock();
@@ -202,6 +228,8 @@ export class ExperimentController extends EventTarget {
     this.stopRequested = true;
     this.stopReason = reason;
     this.releaseDelay?.();
+    this.measurementPolling = false;
+    this.releaseMeasurementDelay?.();
     this.emergencyOffPromise ??= this.device.outputOff().catch((error) => {
       this.fatalError ??= error;
       throw error;
@@ -215,6 +243,8 @@ export class ExperimentController extends EventTarget {
     this.stopRequested = true;
     this.stopReason = this.fatalError.message;
     this.releaseDelay?.();
+    this.measurementPolling = false;
+    this.releaseMeasurementDelay?.();
     this.emergencyOffPromise ??= this.device.outputOff().catch(() => undefined);
   }
 
@@ -243,6 +273,87 @@ export class ExperimentController extends EventTarget {
       };
       const timer = setTimeout(finish, delay);
       this.releaseDelay = finish;
+    });
+  }
+
+  captureMeasurement(state) {
+    const context = this.activeSegment;
+    if (!context || !Number.isFinite(state.measurementSequence)) return;
+    if (state.measurementSequence === this.lastEmittedMeasurementSequence) return;
+    this.lastEmittedMeasurementSequence = state.measurementSequence;
+
+    const receivedAt = Number.isFinite(state.measurementReceivedAtMs)
+      ? state.measurementReceivedAtMs
+      : now();
+    const elapsedSeconds = Math.max(0, (receivedAt - this.startedAt) / 1_000);
+    const segmentElapsed = Math.max(0, (receivedAt - context.segmentStart) / 1_000);
+    const cycle = Math.min(context.cycles, Math.floor(segmentElapsed / context.T) + 1);
+    const sample = {
+      recordType: "measurement",
+      elapsedSeconds,
+      measurementElapsedSeconds: elapsedSeconds,
+      A: context.A,
+      T: context.T,
+      cycle,
+      aIndex: context.aIndex,
+      aCount: context.aCount,
+      commandVoltage: state.setVoltage,
+      commandCurrent: context.currentLimit,
+      measuredVoltage: state.measuredVoltage,
+      measuredCurrent: state.measuredCurrent,
+      measuredPower: state.measuredPower,
+      mode: state.mode,
+      protectionState: state.protectionState,
+      outputEnabled: state.outputEnabled,
+      measurementSequence: state.measurementSequence,
+    };
+    this.logger.add(sample);
+    this.emit("measurement", sample);
+  }
+
+  startMeasurementPolling(intervalMs = HIGH_SPEED_MEASUREMENT_INTERVAL_MS) {
+    if (this.measurementPollTask) return;
+    this.measurementPolling = true;
+    this.measurementPollTask = this.runMeasurementPolling(intervalMs)
+      .catch((error) => {
+        if (this.running && this.measurementPolling) this.abort(error);
+      })
+      .finally(() => {
+        this.measurementPollTask = null;
+      });
+  }
+
+  async stopMeasurementPolling() {
+    this.measurementPolling = false;
+    this.releaseMeasurementDelay?.();
+    await this.measurementPollTask;
+  }
+
+  async runMeasurementPolling(intervalMs) {
+    let nextPollAt = now() + intervalMs;
+    while (this.measurementPolling && this.device.connected) {
+      await this.waitForMeasurementPoll(nextPollAt);
+      if (!this.measurementPolling || !this.device.connected) break;
+      await this.device.requestMeasurements();
+      nextPollAt += intervalMs;
+      if (nextPollAt < now()) nextPollAt = now() + intervalMs;
+    }
+  }
+
+  waitForMeasurementPoll(deadline) {
+    const delay = Math.max(0, deadline - now());
+    if (delay === 0) return Promise.resolve();
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (this.releaseMeasurementDelay === finish) this.releaseMeasurementDelay = null;
+        resolve();
+      };
+      const timer = setTimeout(finish, delay);
+      this.releaseMeasurementDelay = finish;
     });
   }
 

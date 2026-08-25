@@ -21,6 +21,9 @@ class FakeDevice extends EventTarget {
     this.voltages = [];
     this.current = null;
     this.offCalls = 0;
+    this.measurementRequests = 0;
+    this.measurementSequence = 0;
+    this.measurementReceivedAtMs = null;
   }
 
   async setCurrent(value) {
@@ -40,11 +43,30 @@ class FakeDevice extends EventTarget {
     this.offCalls += 1;
   }
 
+  async requestMeasurements() {
+    this.measurementRequests += 1;
+    this.measurementSequence += 1;
+    this.measurementReceivedAtMs = performance.now();
+    const state = this.getState();
+    this.dispatchEvent(new CustomEvent("telemetry", {
+      detail: {
+        state,
+        update: {
+          measuredVoltage: state.measuredVoltage,
+          measuredCurrent: state.measuredCurrent,
+          measuredPower: state.measuredPower,
+        },
+        register: 0xc3,
+      },
+    }));
+  }
+
   getState() {
     return {
       telemetryAgeMs: 0,
       measurementAgeMs: 0,
-      measurementSequence: this.voltages.length,
+      measurementSequence: this.measurementSequence,
+      measurementReceivedAtMs: this.measurementReceivedAtMs,
       measuredVoltage: this.voltages.at(-1) ?? 0,
       measuredCurrent: 0.5,
       measuredPower: 4,
@@ -91,4 +113,16 @@ test("STOP interrupts the timer and leaves output off", async () => {
   assert.equal(result.status, "stopped");
   assert.equal(device.outputEnabled, false);
   assert.ok(device.offCalls >= 1);
+});
+
+test("high-speed polling records individual raw measurement events", async () => {
+  const device = new FakeDevice();
+  const logger = new ExperimentLogger();
+  const controller = new ExperimentController(device, logger);
+  await controller.start(shortConfig(0.18));
+
+  assert.ok(device.measurementRequests >= 2);
+  const measurements = logger.records.filter((record) => record.recordType === "measurement");
+  assert.equal(measurements.length, device.measurementRequests);
+  assert.ok(measurements.every((record) => Number.isFinite(record.measurementElapsedSeconds)));
 });

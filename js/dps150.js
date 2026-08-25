@@ -195,6 +195,7 @@ export class DPS150 extends EventTarget {
       maxCurrent: null,
       measurementSequence: 0,
       measurementRateHz: null,
+      measurementReceivedAtMs: null,
     };
     this.handleSerialDisconnect = this.handleSerialDisconnect.bind(this);
   }
@@ -239,6 +240,7 @@ export class DPS150 extends EventTarget {
     this.smoothedMeasurementIntervalMs = null;
     this.state.measurementSequence = 0;
     this.state.measurementRateHz = null;
+    this.state.measurementReceivedAtMs = null;
     const port = await navigator.serial.requestPort();
     this.port = port;
     navigator.serial.addEventListener("disconnect", this.handleSerialDisconnect);
@@ -444,6 +446,7 @@ export class DPS150 extends EventTarget {
       update.measurementRateHz = this.smoothedMeasurementIntervalMs > 0
         ? 1_000 / this.smoothedMeasurementIntervalMs
         : null;
+      update.measurementReceivedAtMs = receivedAt;
     }
     this.lastTelemetryAt = receivedAt;
     Object.assign(this.state, update);
@@ -575,6 +578,10 @@ export class DPS150 extends EventTarget {
 
   requestRegister(register) {
     return this.sendCommand(COMMAND_GET, register, 0x00);
+  }
+
+  requestMeasurements() {
+    return this.requestRegister(REGISTER.MEASUREMENT);
   }
 
   async getStatus() {

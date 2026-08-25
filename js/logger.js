@@ -1,5 +1,6 @@
 const CSV_HEADERS = [
   "timestamp",
+  "record_type",
   "elapsed_s",
   "A",
   "T_s",
@@ -9,6 +10,7 @@ const CSV_HEADERS = [
   "measured_v",
   "measured_a",
   "measured_w",
+  "measurement_elapsed_s",
   "measurement_sequence",
   "mode",
   "protection",
@@ -30,6 +32,7 @@ export function recordsToCsv(records) {
   for (const record of records) {
     lines.push([
       record.timestamp,
+      record.recordType,
       numeric(record.elapsedSeconds, 3),
       numeric(record.A, 3),
       numeric(record.T, 3),
@@ -39,6 +42,7 @@ export function recordsToCsv(records) {
       numeric(record.measuredVoltage, 4),
       numeric(record.measuredCurrent, 4),
       numeric(record.measuredPower, 4),
+      numeric(record.measurementElapsedSeconds, 3),
       Number.isFinite(record.measurementSequence) ? record.measurementSequence : "",
       record.mode,
       record.protectionState || "OK",
@@ -81,6 +85,7 @@ export class ExperimentLogger {
     }
     this.records.push({
       timestamp: new Date().toISOString(),
+      recordType: sample.recordType ?? "command",
       elapsedSeconds: sample.elapsedSeconds,
       A: sample.A,
       T: sample.T,
@@ -90,6 +95,7 @@ export class ExperimentLogger {
       measuredVoltage: sample.measuredVoltage,
       measuredCurrent: sample.measuredCurrent,
       measuredPower: sample.measuredPower,
+      measurementElapsedSeconds: sample.measurementElapsedSeconds,
       measurementSequence: sample.measurementSequence,
       mode: sample.mode ?? "",
       protectionState: sample.protectionState ?? "",
