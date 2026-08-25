@@ -1,0 +1,12 @@
+{
+  "name": "dps150-auto-wave-control",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser-only Web Serial controller for FNIRSI DPS-150 automated voltage waveforms",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check js/main.js && node --check js/dps150.js && node --check js/waveform.js && node --check js/experiment.js && node --check js/graph.js && node --check js/logger.js"
+  },
+  "license": "MIT"
+}

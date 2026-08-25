@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#07111d">
+  <meta name="description" content="FNIRSI DPS-150をWeb Serialで制御し、正弦波状の電圧シーケンスを自動実行するローカル制御アプリ">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'">
+  <title>FNIRSI DPS-150 Auto Wave Control</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <noscript>
+    <div class="fatal-banner">このアプリの実行にはJavaScriptが必要です。</div>
+  </noscript>
+
+  <header class="app-header">
+    <div class="brand-lockup">
+      <div class="brand-mark" aria-hidden="true">DPS</div>
+      <div>
+        <p class="eyebrow">FNIRSI DPS-150</p>
+        <h1>Auto Wave Control</h1>
+      </div>
+    </div>
+    <div class="header-states" aria-label="機器状態">
+      <div class="state-block">
+        <span class="state-label">DEVICE</span>
+        <span id="connection-state" class="state-value state-off">
+          <span class="status-dot" aria-hidden="true"></span>Disconnected
+        </span>
+      </div>
+      <div class="state-block">
+        <span class="state-label">OUTPUT</span>
+        <span id="output-state" class="output-badge output-off">OFF</span>
+      </div>
+    </div>
+  </header>
+
+  <div id="compatibility-banner" class="compatibility-banner" role="alert" hidden>
+    <strong>Web Serialを利用できません。</strong>
+    HTTPSで開いたGoogle ChromeまたはMicrosoft Edgeを使用してください。会社の管理ポリシーで無効化されている場合は管理者への確認が必要です。
+  </div>
+
+  <main class="app-shell">
+    <section class="control-column" aria-label="実験設定">
+      <div class="panel device-panel">
+        <div class="panel-heading">
+          <div>
+            <p class="section-index">01 / DEVICE</p>
+            <h2>接続</h2>
+          </div>
+          <span id="model-name" class="model-chip">DPS-150</span>
+        </div>
+
+        <dl class="device-details">
+          <div>
+            <dt>Connection</dt>
+            <dd id="device-connection-detail">Not connected</dd>
+          </div>
+          <div>
+            <dt>Hardware</dt>
+            <dd id="hardware-version">—</dd>
+          </div>
+          <div>
+            <dt>Firmware</dt>
+            <dd id="firmware-version">—</dd>
+          </div>
+        </dl>
+
+        <button id="connect-button" class="button button-connect" type="button">
+          <span class="button-icon" aria-hidden="true">↗</span>
+          <span>CONNECT DEVICE</span>
+        </button>
+      </div>
+
+      <form id="settings-form" class="panel settings-panel" novalidate>
+        <div class="panel-heading">
+          <div>
+            <p class="section-index">02 / CONTROL</p>
+            <h2>実験条件</h2>
+          </div>
+          <span class="safe-chip">LOCAL ONLY</span>
+        </div>
+
+        <div class="form-section critical-setting">
+          <label for="current-limit">Current Limit <span class="required">必須</span></label>
+          <div class="input-with-unit">
+            <input id="current-limit" name="currentLimit" type="number" min="0.001" max="5" step="0.001" placeholder="1.000" inputmode="decimal" required>
+            <span>A</span>
+          </div>
+          <p class="field-help">試験対象に適した安全な上限を入力してください。</p>
+        </div>
+
+        <fieldset class="form-section">
+          <legend>A sweep</legend>
+          <div class="triple-grid">
+            <label>
+              <span>Start</span>
+              <input id="a-start" name="aStart" type="number" min="2" max="14" step="0.1" value="2.0" required>
+            </label>
+            <label>
+              <span>End</span>
+              <input id="a-end" name="aEnd" type="number" min="2" max="14" step="0.1" value="14.0" required>
+            </label>
+            <label>
+              <span>Step</span>
+              <input id="a-step" name="aStep" type="number" min="0.1" max="12" step="0.1" value="0.1" required>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>Periods</legend>
+          <div class="period-options">
+            <label class="check-card">
+              <input type="checkbox" name="period" value="1" checked>
+              <span class="check-mark" aria-hidden="true"></span>
+              <span><strong>1</strong> sec</span>
+            </label>
+            <label class="check-card">
+              <input type="checkbox" name="period" value="5" checked>
+              <span class="check-mark" aria-hidden="true"></span>
+              <span><strong>5</strong> sec</span>
+            </label>
+            <label class="check-card">
+              <input type="checkbox" name="period" value="10" checked>
+              <span class="check-mark" aria-hidden="true"></span>
+              <span><strong>10</strong> sec</span>
+            </label>
+          </div>
+        </fieldset>
+
+        <div class="form-section dual-grid">
+          <label>
+            <span>Cycles / Period</span>
+            <div class="input-with-unit">
+              <input id="cycles" name="cycles" type="number" min="1" max="99" step="1" value="3" required>
+              <span>cycles</span>
+            </div>
+          </label>
+          <label>
+            <span>Update Interval</span>
+            <div class="input-with-unit">
+              <select id="update-interval" name="updateInterval">
+                <option value="10">10</option>
+                <option value="20">20</option>
+                <option value="50" selected>50</option>
+                <option value="100">100</option>
+              </select>
+              <span>ms</span>
+            </div>
+          </label>
+        </div>
+
+        <div class="equation-card" aria-label="出力電圧の計算式">
+          <span class="equation-label">WAVEFORM</span>
+          <span class="equation">V(t) = (7 + A/2) + (7 − A/2) sin(2πt/T)</span>
+          <span id="voltage-range" class="equation-range">Expected range 2.00—14.00 V</span>
+        </div>
+
+        <div id="validation-message" class="validation-message" role="alert" hidden></div>
+      </form>
+    </section>
+
+    <section class="monitor-column" aria-label="実験モニター">
+      <div class="panel run-panel">
+        <div class="run-topline">
+          <div>
+            <p class="section-index">03 / RUN STATUS</p>
+            <div class="run-title-row">
+              <h2 id="run-state">Ready</h2>
+              <span id="run-pulse" class="run-pulse" aria-hidden="true"></span>
+            </div>
+          </div>
+          <div class="run-actions">
+            <button id="start-button" class="button button-start" type="button" disabled>
+              <span aria-hidden="true">▶</span> START
+            </button>
+            <button id="stop-button" class="button button-stop" type="button" disabled>
+              <span aria-hidden="true">■</span> STOP
+            </button>
+          </div>
+        </div>
+
+        <div id="status-message" class="status-message status-info" role="status" aria-live="polite">
+          DPS-150を接続し、Current Limitを設定してください。
+        </div>
+
+        <div class="sequence-strip">
+          <div class="sequence-primary">
+            <span class="metric-label">CURRENT A</span>
+            <strong id="current-a">—</strong>
+            <span id="a-total" class="metric-tail">/ 14.0</span>
+          </div>
+          <div>
+            <span class="metric-label">PERIOD</span>
+            <strong id="current-period">—</strong>
+          </div>
+          <div>
+            <span class="metric-label">CYCLE</span>
+            <strong id="current-cycle">—</strong>
+          </div>
+          <div>
+            <span class="metric-label">A STEP</span>
+            <strong id="current-step">0 / 121</strong>
+          </div>
+        </div>
+
+        <div class="progress-block">
+          <div class="progress-meta">
+            <span>OVERALL PROGRESS</span>
+            <strong id="progress-percent">0.0%</strong>
+          </div>
+          <div class="progress-track" role="progressbar" aria-label="実験進捗" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="time-grid">
+          <div>
+            <span class="metric-label">ELAPSED</span>
+            <strong id="elapsed-time">00:00:00</strong>
+          </div>
+          <div>
+            <span class="metric-label">REMAINING</span>
+            <strong id="remaining-time">01:36:48</strong>
+          </div>
+          <div>
+            <span class="metric-label">EST. FINISH</span>
+            <strong id="finish-time">—</strong>
+          </div>
+        </div>
+      </div>
+
+      <div class="telemetry-grid">
+        <article class="telemetry-card command-card">
+          <span class="telemetry-index">CMD</span>
+          <span class="metric-label">COMMAND VOLTAGE</span>
+          <div><strong id="command-voltage">—</strong><span>V</span></div>
+        </article>
+        <article class="telemetry-card measured-card">
+          <span class="telemetry-index">OUT</span>
+          <span class="metric-label">MEASURED VOLTAGE</span>
+          <div><strong id="measured-voltage">—</strong><span>V</span></div>
+        </article>
+        <article class="telemetry-card">
+          <span class="telemetry-index">AMP</span>
+          <span class="metric-label">MEASURED CURRENT</span>
+          <div><strong id="measured-current">—</strong><span>A</span></div>
+        </article>
+        <article class="telemetry-card">
+          <span class="telemetry-index">PWR</span>
+          <span class="metric-label">MEASURED POWER</span>
+          <div><strong id="measured-power">—</strong><span>W</span></div>
+        </article>
+      </div>
+
+      <div class="panel graph-panel">
+        <div class="graph-header">
+          <div>
+            <p class="section-index">04 / LIVE WAVEFORM</p>
+            <h2>Voltage response</h2>
+          </div>
+          <div class="legend" aria-label="グラフ凡例">
+            <span><i class="legend-command"></i>Command</span>
+            <span><i class="legend-measured"></i>Measured</span>
+          </div>
+        </div>
+        <div class="canvas-wrap">
+          <canvas id="voltage-graph" aria-label="設定電圧と実測電圧のリアルタイムグラフ"></canvas>
+          <span class="axis-label axis-y">VOLTAGE [V]</span>
+          <span class="axis-label axis-x">TIME [s]</span>
+        </div>
+        <div class="graph-footer">
+          <span id="graph-window">Window 30 s</span>
+          <span>Buffer max. 2,000 points</span>
+          <button id="download-csv" class="text-button" type="button" disabled>DOWNLOAD CSV ↓</button>
+        </div>
+      </div>
+
+      <aside class="safety-note">
+        <span class="safety-symbol" aria-hidden="true">!</span>
+        <div>
+          <strong>Safety interlock</strong>
+          <p>STOP・正常終了・通信異常時はOUTPUT OFFを送信します。ブラウザ終了やPCスリープ時の停止は保証できないため、DPS-150本体の保護設定も必ず使用してください。</p>
+        </div>
+      </aside>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <span>Runs locally in this browser. Measurement data is not transmitted.</span>
+    <span>Chrome / Edge · Web Serial · Secure Context</span>
+  </footer>
+
+  <dialog id="start-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
+    <form method="dialog">
+      <p class="section-index">EXPERIMENT CHECK</p>
+      <h2 id="confirm-title">Start experiment?</h2>
+      <p class="dialog-lead">出力を開始する前に、配線・負荷・保護設定を確認してください。</p>
+      <dl class="confirm-summary">
+        <div><dt>A</dt><dd id="confirm-a">2.0 → 14.0 / 0.1</dd></div>
+        <div><dt>Periods</dt><dd id="confirm-periods">1 / 5 / 10 sec</dd></div>
+        <div><dt>Cycles</dt><dd id="confirm-cycles">3 each</dd></div>
+        <div><dt>Duration</dt><dd id="confirm-duration">01:36:48</dd></div>
+        <div class="confirm-critical"><dt>Current Limit</dt><dd id="confirm-current">— A</dd></div>
+      </dl>
+      <label class="safety-confirmation">
+        <input id="safety-confirm" type="checkbox">
+        <span>配線とCurrent Limitを確認しました</span>
+      </label>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="cancel" type="submit">CANCEL</button>
+        <button id="confirm-start" class="button button-start" value="start" type="submit" disabled>START OUTPUT</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
