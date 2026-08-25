@@ -30,20 +30,35 @@ jobs:
         run: npm test
 
   deploy:
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     needs: test
     steps:
-      - name: Checkout
+      - name: Checkout stable site
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: stable-site
+      - name: Checkout Python site
+        uses: actions/checkout@v4
+        with:
+          ref: feature/python-control-ui
+          path: python-site
+      - name: Assemble stable and Python sites
+        run: |
+          mkdir public-site
+          rsync -a --exclude='.git' stable-site/ public-site/
+          mkdir public-site/python
+          rsync -a --exclude='.git' python-site/ public-site/python/
       - name: Configure Pages
         uses: actions/configure-pages@v5
       - name: Upload static site
         uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: public-site
       - name: Deploy
         id: deployment
         uses: actions/deploy-pages@v4
