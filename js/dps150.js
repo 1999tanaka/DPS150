@@ -173,6 +173,8 @@ export class DPS150 extends EventTarget {
     this.writeChain = Promise.resolve();
     this.registerVersions = new Map();
     this.lastTelemetryAt = 0;
+    this.lastMeasurementAt = 0;
+    this.smoothedMeasurementIntervalMs = null;
     this.closing = false;
     this.state = {
       connected: false,
@@ -191,6 +193,8 @@ export class DPS150 extends EventTarget {
       mode: "",
       maxVoltage: null,
       maxCurrent: null,
+      measurementSequence: 0,
+      measurementRateHz: null,
     };
     this.handleSerialDisconnect = this.handleSerialDisconnect.bind(this);
   }
@@ -207,8 +211,16 @@ export class DPS150 extends EventTarget {
     return this.lastTelemetryAt ? monotonicNow() - this.lastTelemetryAt : Number.POSITIVE_INFINITY;
   }
 
+  get measurementAgeMs() {
+    return this.lastMeasurementAt ? monotonicNow() - this.lastMeasurementAt : Number.POSITIVE_INFINITY;
+  }
+
   getState() {
-    return { ...this.state, telemetryAgeMs: this.telemetryAgeMs };
+    return {
+      ...this.state,
+      telemetryAgeMs: this.telemetryAgeMs,
+      measurementAgeMs: this.measurementAgeMs,
+    };
   }
 
   async connect() {
@@ -223,6 +235,10 @@ export class DPS150 extends EventTarget {
     this.closing = false;
     this.parser.reset();
     this.registerVersions.clear();
+    this.lastMeasurementAt = 0;
+    this.smoothedMeasurementIntervalMs = null;
+    this.state.measurementSequence = 0;
+    this.state.measurementRateHz = null;
     const port = await navigator.serial.requestPort();
     this.port = port;
     navigator.serial.addEventListener("disconnect", this.handleSerialDisconnect);
@@ -413,7 +429,23 @@ export class DPS150 extends EventTarget {
     for (const key of Object.keys(update)) {
       if (update[key] === undefined || Number.isNaN(update[key])) delete update[key];
     }
-    this.lastTelemetryAt = monotonicNow();
+    const receivedAt = monotonicNow();
+    if ((register === REGISTER.MEASUREMENT || register === REGISTER.ALL)
+      && Number.isFinite(update.measuredVoltage)
+      && Number.isFinite(update.measuredCurrent)) {
+      if (this.lastMeasurementAt > 0) {
+        const intervalMs = receivedAt - this.lastMeasurementAt;
+        this.smoothedMeasurementIntervalMs = this.smoothedMeasurementIntervalMs == null
+          ? intervalMs
+          : this.smoothedMeasurementIntervalMs * 0.75 + intervalMs * 0.25;
+      }
+      this.lastMeasurementAt = receivedAt;
+      update.measurementSequence = (this.state.measurementSequence ?? 0) + 1;
+      update.measurementRateHz = this.smoothedMeasurementIntervalMs > 0
+        ? 1_000 / this.smoothedMeasurementIntervalMs
+        : null;
+    }
+    this.lastTelemetryAt = receivedAt;
     Object.assign(this.state, update);
     this.dispatchEvent(new CustomEvent("telemetry", {
       detail: { state: this.getState(), update, register },

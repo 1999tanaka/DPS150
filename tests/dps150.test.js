@@ -78,3 +78,22 @@ test("parser skips noise and recovers after a bad checksum", () => {
   assert.equal(frames.length, 1);
   assert.deepEqual([...frames[0].data], [0]);
 });
+
+test("measurement frames advance a dedicated raw-sample sequence", () => {
+  const payload = new Uint8Array(12);
+  const view = new DataView(payload.buffer);
+  view.setFloat32(0, 13.25, true);
+  view.setFloat32(4, 0.1, true);
+  view.setFloat32(8, 1.325, true);
+
+  const dps = new DPS150();
+  dps.handleFrame({ command: 0xa1, register: REGISTER.MEASUREMENT, data: payload });
+  const first = dps.getState();
+  dps.handleFrame({ command: 0xa1, register: REGISTER.MEASUREMENT, data: payload });
+  const second = dps.getState();
+
+  assert.equal(first.measurementSequence, 1);
+  assert.equal(second.measurementSequence, 2);
+  assert.equal(second.measuredVoltage, 13.25);
+  assert.ok(Number.isFinite(second.measurementAgeMs));
+});

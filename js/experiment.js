@@ -1,4 +1,4 @@
-import { calculateVoltage } from "./waveform.js?v=20260825.5";
+import { calculateVoltage } from "./waveform.js?v=20260825.6";
 
 const TELEMETRY_STALE_MS = 3_000;
 
@@ -97,7 +97,7 @@ export class ExperimentController extends EventTarget {
             if (telemetry.protectionState) {
               throw new Error(`DPS-150保護状態を検出しました: ${telemetry.protectionState}`);
             }
-            if (telemetry.telemetryAgeMs > TELEMETRY_STALE_MS) {
+            if (telemetry.measurementAgeMs > TELEMETRY_STALE_MS) {
               throw new Error("DPS-150のテレメトリ応答がタイムアウトしました。");
             }
 
@@ -128,6 +128,7 @@ export class ExperimentController extends EventTarget {
               mode: telemetry.mode,
               protectionState: telemetry.protectionState,
               outputEnabled: telemetry.outputEnabled,
+              measurementSequence: telemetry.measurementSequence,
             };
             this.logger.add(sample);
             this.emit("progress", sample);

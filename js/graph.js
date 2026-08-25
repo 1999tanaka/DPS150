@@ -9,11 +9,10 @@ const COLORS = Object.freeze({
 });
 
 const LIVE_LEAD_SECONDS = 1;
+const FIXED_WINDOW_SECONDS = 30;
 
-export function resolveWindowSeconds(period) {
-  if (period <= 1) return 10;
-  if (period <= 5) return 20;
-  return 30;
+export function resolveWindowSeconds() {
+  return FIXED_WINDOW_SECONDS;
 }
 
 export function resolveTimeAxis(latestTime, windowSeconds) {
@@ -68,8 +67,8 @@ class LiveGraph {
     this.requestDraw();
   }
 
-  setPeriod(period) {
-    this.windowSeconds = resolveWindowSeconds(period);
+  setPeriod() {
+    this.windowSeconds = resolveWindowSeconds();
     this.requestDraw();
     return this.windowSeconds;
   }
@@ -179,8 +178,8 @@ class LiveGraph {
       return;
     }
 
-    for (const { key, color, lineWidth } of this.series) {
-      this.drawSeries(visiblePoints, key, color, xToCanvas, yToCanvas, lineWidth);
+    for (const { key, color, lineWidth, showPoints = false } of this.series) {
+      this.drawSeries(visiblePoints, key, color, xToCanvas, yToCanvas, lineWidth, showPoints);
     }
 
     this.drawLiveEdge(visiblePoints.at(-1), xToCanvas);
@@ -205,18 +204,17 @@ class LiveGraph {
     ctx.restore();
   }
 
-  drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth) {
+  drawSeries(points, key, color, xToCanvas, yToCanvas, lineWidth, showPoints) {
     const ctx = this.context;
     let drawing = false;
+    const plottedPoints = [];
     ctx.beginPath();
     for (const point of points) {
       const value = point[key];
-      if (!Number.isFinite(value)) {
-        drawing = false;
-        continue;
-      }
+      if (!Number.isFinite(value)) continue;
       const x = xToCanvas(point.time);
       const y = yToCanvas(value);
+      plottedPoints.push({ x, y });
       if (!drawing) {
         ctx.moveTo(x, y);
         drawing = true;
@@ -229,6 +227,15 @@ class LiveGraph {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     ctx.stroke();
+
+    if (showPoints) {
+      ctx.fillStyle = color;
+      for (const { x, y } of plottedPoints) {
+        ctx.beginPath();
+        ctx.arc(x, y, 1.7, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
   }
 
   destroy() {
@@ -243,7 +250,7 @@ export class VoltageGraph extends LiveGraph {
       fixedYMax: 15,
       series: [
         { key: "commandVoltage", color: COLORS.commandVoltage, lineWidth: 1.8 },
-        { key: "measuredVoltage", color: COLORS.measuredVoltage, lineWidth: 1.45 },
+        { key: "measuredVoltage", color: COLORS.measuredVoltage, lineWidth: 1.45, showPoints: true },
       ],
     });
   }
@@ -256,7 +263,7 @@ export class CurrentGraph extends LiveGraph {
       minimumYMax: 0.1,
       series: [
         { key: "commandCurrent", color: COLORS.commandCurrent, lineWidth: 1.8 },
-        { key: "measuredCurrent", color: COLORS.measuredCurrent, lineWidth: 1.45 },
+        { key: "measuredCurrent", color: COLORS.measuredCurrent, lineWidth: 1.45, showPoints: true },
       ],
     });
   }

@@ -55,11 +55,12 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - 0～機器報告上限Vの送信前チェック
 - USB切断、送受信タイムアウト、保護状態検出時の異常停止
 - OUTPUT ON/OFFの機器応答確認と、未確認時の状態読出し・1回再送
-- Command / Measured VoltageのCanvasリアルタイムグラフ（最大2,000点）
-- Current Limit / Measured Currentの自動スケールCanvasグラフ（最大2,000点）
+- Command / Measured Voltageの30秒固定Canvasリアルタイムグラフ（最大10,000点）
+- Current Limit / Measured Currentの30秒固定・自動スケールCanvasグラフ（最大10,000点）
+- DPS-150から届いた実測点のみを表示し、点間を直線補間（生データ更新レートも表示）
 - Command / Measuredの電圧・電流数値、Measured Power、進捗・残り時間表示
 - Wake Lock（利用可能なブラウザのみ）とページ離脱警告
-- Current Limitを含む最大250,000件の実験ログとCSVダウンロード
+- Current Limitと実測サンプル番号を含む最大250,000件の実験ログとCSVダウンロード
 - 外部CDN、外部API、サーバー側データベース不使用
 
 ## ファイル構成

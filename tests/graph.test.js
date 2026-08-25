@@ -3,9 +3,9 @@ import test from "node:test";
 
 import { resolveTimeAxis, resolveWindowSeconds } from "../js/graph.js";
 
-test("graph windows retain complete experiment segments", () => {
-  assert.equal(resolveWindowSeconds(1), 10);
-  assert.equal(resolveWindowSeconds(5), 20);
+test("graph window stays fixed regardless of experiment period", () => {
+  assert.equal(resolveWindowSeconds(1), 30);
+  assert.equal(resolveWindowSeconds(5), 30);
   assert.equal(resolveWindowSeconds(10), 30);
 });
 

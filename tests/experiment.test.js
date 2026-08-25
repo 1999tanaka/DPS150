@@ -43,6 +43,8 @@ class FakeDevice extends EventTarget {
   getState() {
     return {
       telemetryAgeMs: 0,
+      measurementAgeMs: 0,
+      measurementSequence: this.voltages.length,
       measuredVoltage: this.voltages.at(-1) ?? 0,
       measuredCurrent: 0.5,
       measuredPower: 4,

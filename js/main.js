@@ -1,12 +1,12 @@
-import { DPS150 } from "./dps150.js?v=20260825.5";
-import { ExperimentController } from "./experiment.js?v=20260825.5";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.5";
-import { ExperimentLogger } from "./logger.js?v=20260825.5";
+import { DPS150 } from "./dps150.js?v=20260825.6";
+import { ExperimentController } from "./experiment.js?v=20260825.6";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.6";
+import { ExperimentLogger } from "./logger.js?v=20260825.6";
 import {
   calculateVoltageRange,
   formatDuration,
   validateExperimentConfig,
-} from "./waveform.js?v=20260825.5";
+} from "./waveform.js?v=20260825.6";
 
 const byId = (id) => document.getElementById(id);
 
@@ -53,6 +53,8 @@ const elements = {
   currentGraphCanvas: byId("current-graph"),
   voltageGraphWindow: byId("voltage-graph-window") ?? byId("graph-window"),
   currentGraphWindow: byId("current-graph-window"),
+  voltageTelemetryRate: byId("voltage-telemetry-rate"),
+  currentTelemetryRate: byId("current-telemetry-rate"),
   downloadCsv: byId("download-csv"),
   startDialog: byId("start-dialog"),
   safetyConfirm: byId("safety-confirm"),
@@ -78,6 +80,7 @@ let pendingConfig = null;
 let activeConfig = null;
 let connectionBusy = false;
 let activeRunPromise = null;
+let lastGraphedMeasurementSequence = null;
 
 function readFormValues() {
   return {
@@ -173,6 +176,11 @@ function updateTelemetry(state = device.getState()) {
   elements.measuredVoltage.textContent = numericText(state.measuredVoltage, 3);
   elements.measuredCurrent.textContent = numericText(state.measuredCurrent, 3);
   elements.measuredPower.textContent = numericText(state.measuredPower, 3);
+  const measurementRate = Number.isFinite(state.measurementRateHz)
+    ? `Measured raw ${state.measurementRateHz.toFixed(1)} Hz`
+    : "Measured raw — Hz";
+  if (elements.voltageTelemetryRate) elements.voltageTelemetryRate.textContent = measurementRate;
+  if (elements.currentTelemetryRate) elements.currentTelemetryRate.textContent = measurementRate;
   updateDeviceState(state);
 }
 
@@ -260,6 +268,7 @@ function openStartConfirmation() {
 
 async function runExperiment(config) {
   activeConfig = config;
+  lastGraphedMeasurementSequence = null;
   voltageGraph.clear();
   currentGraph?.clear();
   setFormDisabled(true);
@@ -342,15 +351,14 @@ experiment.addEventListener("started", () => {
   setStatus("Experiment running. このページを前面に保ち、PCをスリープさせないでください。", "success");
 });
 
-experiment.addEventListener("segment", (event) => {
-  const { T } = event.detail;
-  const voltageWindowSeconds = voltageGraph.setPeriod(T);
-  const currentWindowSeconds = currentGraph?.setPeriod(T);
+experiment.addEventListener("segment", () => {
+  const voltageWindowSeconds = voltageGraph.setPeriod();
+  const currentWindowSeconds = currentGraph?.setPeriod();
   if (elements.voltageGraphWindow) {
-    elements.voltageGraphWindow.textContent = `Window ${voltageWindowSeconds} s · 1 s ticks`;
+    elements.voltageGraphWindow.textContent = `Fixed window ${voltageWindowSeconds} s · 1 s ticks`;
   }
   if (elements.currentGraphWindow && currentWindowSeconds) {
-    elements.currentGraphWindow.textContent = `Window ${currentWindowSeconds} s · 1 s ticks`;
+    elements.currentGraphWindow.textContent = `Fixed window ${currentWindowSeconds} s · 1 s ticks`;
   }
 });
 
@@ -368,15 +376,18 @@ experiment.addEventListener("progress", (event) => {
   elements.remainingTime.textContent = formatDuration(sample.remainingSeconds);
   elements.finishTime.textContent = finishClock(sample.remainingSeconds);
   setProgress(sample.progress);
+  const freshMeasurement = Number.isFinite(sample.measurementSequence)
+    && sample.measurementSequence !== lastGraphedMeasurementSequence;
+  if (freshMeasurement) lastGraphedMeasurementSequence = sample.measurementSequence;
   voltageGraph.addPoint({
     time: sample.elapsedSeconds,
     commandVoltage: sample.commandVoltage,
-    measuredVoltage: sample.measuredVoltage,
+    measuredVoltage: freshMeasurement ? sample.measuredVoltage : null,
   });
   currentGraph?.addPoint({
     time: sample.elapsedSeconds,
     commandCurrent: sample.commandCurrent,
-    measuredCurrent: sample.measuredCurrent,
+    measuredCurrent: freshMeasurement ? sample.measuredCurrent : null,
   });
 });
 
