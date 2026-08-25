@@ -29,6 +29,8 @@ const REGISTER = Object.freeze({
 const PROTECTION_STATES = ["", "OVP", "OCP", "OPP", "OTP", "LVP", "REP"];
 const DEFAULT_WRITE_TIMEOUT_MS = 1_500;
 const DEFAULT_RESPONSE_TIMEOUT_MS = 3_000;
+const DEFAULT_COMMAND_SETTLE_MS = 60;
+const DEFAULT_OUTPUT_CONFIRM_TIMEOUT_MS = 750;
 
 export class DPS150Error extends Error {
   constructor(message, code = "DPS150_ERROR", cause) {
@@ -153,6 +155,10 @@ function monotonicNow() {
   return globalThis.performance?.now?.() ?? Date.now();
 }
 
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 export class DPS150 extends EventTarget {
   constructor(options = {}) {
     super();
@@ -162,7 +168,10 @@ export class DPS150 extends EventTarget {
     this.parser = new PacketParser();
     this.writeTimeoutMs = options.writeTimeoutMs ?? DEFAULT_WRITE_TIMEOUT_MS;
     this.responseTimeoutMs = options.responseTimeoutMs ?? DEFAULT_RESPONSE_TIMEOUT_MS;
+    this.commandSettleMs = options.commandSettleMs ?? DEFAULT_COMMAND_SETTLE_MS;
+    this.outputConfirmTimeoutMs = options.outputConfirmTimeoutMs ?? DEFAULT_OUTPUT_CONFIRM_TIMEOUT_MS;
     this.writeChain = Promise.resolve();
+    this.registerVersions = new Map();
     this.lastTelemetryAt = 0;
     this.closing = false;
     this.state = {
@@ -213,6 +222,7 @@ export class DPS150 extends EventTarget {
 
     this.closing = false;
     this.parser.reset();
+    this.registerVersions.clear();
     const port = await navigator.serial.requestPort();
     this.port = port;
     navigator.serial.addEventListener("disconnect", this.handleSerialDisconnect);
@@ -230,10 +240,15 @@ export class DPS150 extends EventTarget {
       this.readTask = this.readLoop();
       const responseBaseline = this.lastTelemetryAt;
       await this.sendCommand(COMMAND_SESSION, 0x00, 0x01);
+      await delay(this.commandSettleMs);
       await this.sendCommand(COMMAND_BAUD, 0x00, 0x05);
+      await delay(this.commandSettleMs);
       await this.requestRegister(REGISTER.MODEL_NAME);
+      await delay(this.commandSettleMs);
       await this.requestRegister(REGISTER.HARDWARE_VERSION);
+      await delay(this.commandSettleMs);
       await this.requestRegister(REGISTER.FIRMWARE_VERSION);
+      await delay(this.commandSettleMs);
       await this.requestRegister(REGISTER.ALL);
       await this.waitForTelemetry(this.responseTimeoutMs, responseBaseline);
 
@@ -343,6 +358,7 @@ export class DPS150 extends EventTarget {
   handleFrame(frame) {
     if (frame.command !== COMMAND_GET) return;
     const { register, data } = frame;
+    this.registerVersions.set(register, (this.registerVersions.get(register) ?? 0) + 1);
     const update = {};
 
     switch (register) {
@@ -445,6 +461,32 @@ export class DPS150 extends EventTarget {
     });
   }
 
+  waitForRegister(register, afterVersion, timeoutMs = this.outputConfirmTimeoutMs) {
+    if ((this.registerVersions.get(register) ?? 0) > afterVersion) {
+      return Promise.resolve(this.getState());
+    }
+    return new Promise((resolve, reject) => {
+      const onTelemetry = (event) => {
+        if (event.detail?.register !== register) return;
+        if ((this.registerVersions.get(register) ?? 0) <= afterVersion) return;
+        cleanup();
+        resolve(this.getState());
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new DPS150Error(
+          `DPS-150 register 0x${register.toString(16).toUpperCase()} response timeout.`,
+          "REGISTER_TIMEOUT",
+        ));
+      }, timeoutMs);
+      const cleanup = () => {
+        clearTimeout(timer);
+        this.removeEventListener("telemetry", onTelemetry);
+      };
+      this.addEventListener("telemetry", onTelemetry);
+    });
+  }
+
   publishState(reason) {
     this.dispatchEvent(new CustomEvent("statechange", {
       detail: { state: this.getState(), reason },
@@ -527,10 +569,48 @@ export class DPS150 extends EventTarget {
     this.publishState("current-set");
   }
 
-  async outputOn() {
-    await this.sendCommand(COMMAND_SET, REGISTER.OUTPUT_ENABLE, 0x01);
-    this.state.outputEnabled = true;
-    this.publishState("output-on");
+  async setOutputEnabled(enabled) {
+    const value = enabled ? 0x01 : 0x00;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const setVersion = this.registerVersions.get(REGISTER.OUTPUT_ENABLE) ?? 0;
+      await this.sendCommand(COMMAND_SET, REGISTER.OUTPUT_ENABLE, value);
+      try {
+        await this.waitForRegister(REGISTER.OUTPUT_ENABLE, setVersion);
+      } catch {
+        // Some firmware does not echo a SET. Verify with an explicit read below.
+      }
+      if (this.state.outputEnabled === enabled
+        && (this.registerVersions.get(REGISTER.OUTPUT_ENABLE) ?? 0) > setVersion) {
+        this.publishState(enabled ? "output-on-confirmed" : "output-off-confirmed");
+        return;
+      }
+
+      await delay(this.commandSettleMs);
+      const readVersion = this.registerVersions.get(REGISTER.OUTPUT_ENABLE) ?? 0;
+      await this.requestRegister(REGISTER.OUTPUT_ENABLE);
+      try {
+        await this.waitForRegister(REGISTER.OUTPUT_ENABLE, readVersion);
+      } catch {
+        // Retry the SET once when neither the change event nor explicit read confirms it.
+      }
+      if (this.state.outputEnabled === enabled
+        && (this.registerVersions.get(REGISTER.OUTPUT_ENABLE) ?? 0) > readVersion) {
+        this.publishState(enabled ? "output-on-confirmed" : "output-off-confirmed");
+        return;
+      }
+      if (attempt === 0) await delay(this.commandSettleMs);
+    }
+
+    throw new DPS150Error(
+      enabled
+        ? "DPS-150がOUTPUT ONを確認できませんでした。"
+        : "DPS-150がOUTPUT OFFを確認できませんでした。",
+      enabled ? "OUTPUT_ON_NOT_CONFIRMED" : "OUTPUT_OFF_NOT_CONFIRMED",
+    );
+  }
+
+  outputOn() {
+    return this.setOutputEnabled(true);
   }
 
   async outputOff() {
@@ -539,9 +619,7 @@ export class DPS150 extends EventTarget {
       this.publishState("output-off-unavailable");
       return;
     }
-    await this.sendCommand(COMMAND_SET, REGISTER.OUTPUT_ENABLE, 0x00);
-    this.state.outputEnabled = false;
-    this.publishState("output-off");
+    await this.setOutputEnabled(false);
   }
 }
 

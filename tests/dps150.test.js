@@ -2,11 +2,22 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  DPS150,
   PacketParser,
+  REGISTER,
   buildPacket,
   calculateChecksum,
   encodeFloat32,
 } from "../js/dps150.js";
+
+if (typeof globalThis.CustomEvent === "undefined") {
+  globalThis.CustomEvent = class CustomEvent extends Event {
+    constructor(type, options = {}) {
+      super(type);
+      this.detail = options.detail;
+    }
+  };
+}
 
 test("builds the documented 12.3 V set packet", () => {
   const packet = buildPacket(0xb1, 0xc1, encodeFloat32(12.3));
@@ -19,6 +30,31 @@ test("builds the documented 12.3 V set packet", () => {
 test("checksum excludes header and command bytes", () => {
   assert.equal(calculateChecksum(0xdb, [1]), 0xdd);
   assert.equal(calculateChecksum(0xdb, [0]), 0xdc);
+});
+
+test("builds the documented OUTPUT ON packet", () => {
+  assert.deepEqual(
+    [...buildPacket(0xb1, REGISTER.OUTPUT_ENABLE, [1])],
+    [0xf1, 0xb1, 0xdb, 0x01, 0x01, 0xdd],
+  );
+});
+
+test("OUTPUT ON is accepted only after the device confirms register 0xDB", async () => {
+  const dps = new DPS150({ outputConfirmTimeoutMs: 25, commandSettleMs: 1 });
+  const sent = [];
+  dps.sendCommand = async (command, register, data) => {
+    sent.push({ command, register, data });
+    if (command === 0xb1 && register === REGISTER.OUTPUT_ENABLE) {
+      setTimeout(() => {
+        dps.handleFrame({ command: 0xa1, register, data: Uint8Array.of(data) });
+      }, 1);
+    }
+  };
+
+  await dps.outputOn();
+  assert.equal(dps.getState().outputEnabled, true);
+  assert.equal(sent[0].register, REGISTER.OUTPUT_ENABLE);
+  assert.equal(sent[0].data, 1);
 });
 
 test("parser reconstructs a response split across chunks", () => {

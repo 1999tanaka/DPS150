@@ -61,10 +61,14 @@ export class ExperimentController extends EventTarget {
     try {
       await this.device.setCurrent(config.currentLimit);
       this.throwIfStopped();
+      await this.waitUntil(now() + 60);
+      this.throwIfStopped();
 
       const firstVoltage = calculateVoltage(config.aValues[0], config.periods[0], 0);
       this.assertSafeVoltage(firstVoltage, config.deviceMaxVoltage);
       await this.device.setVoltage(firstVoltage);
+      this.throwIfStopped();
+      await this.waitUntil(now() + 60);
       this.throwIfStopped();
       await this.device.outputOn();
       this.throwIfStopped();

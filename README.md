@@ -54,6 +54,7 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - STOP最優先制御、二重START防止、実行中の設定ロック
 - 0～機器報告上限Vの送信前チェック
 - USB切断、送受信タイムアウト、保護状態検出時の異常停止
+- OUTPUT ON/OFFの機器応答確認と、未確認時の状態読出し・1回再送
 - Command / Measured VoltageのCanvasリアルタイムグラフ（最大2,000点）
 - Measured Voltage / Current / Powerと進捗・残り時間表示
 - Wake Lock（利用可能なブラウザのみ）とページ離脱警告
@@ -92,6 +93,9 @@ F1 <command> <register> <length> <data...> <checksum>
 - Flow control: hardware
 - Float: IEEE-754 float32 little-endian
 - Checksum: `(register + length + sum(data)) & 0xff`
+- Output ON: `F1 B1 DB 01 01 DD`（OFFはデータ`00`）
+
+Current Limit、初期電圧、OUTPUT ON等の制御遷移には60 msのコマンド間隔を設けています。波形更新中は選択したUpdate Intervalを使用します。
 
 通信レジスタとフレーム形式は、cho45氏のMITライセンス実装 [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) を参考にしています。詳細は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。プロトコルは非公式のリバースエンジニアリング情報であり、FNIRSI公式仕様ではありません。
 
