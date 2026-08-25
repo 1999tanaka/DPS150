@@ -2,9 +2,13 @@
 
 FNIRSI DPS-150をUSB接続し、Chrome / Edgeの画面に書いたPythonで電圧・電流指令を生成する静的Webアプリです。DPS-150との通信はWeb Serial APIを使ってブラウザとUSBデバイスの間だけで行い、測定値を外部サーバーへ送信しません。
 
-この`feature/python-control-ui`ブランチはPython制御版です。`main`の安定版は変更せず残しています。下記の公開URLは現在`main`を配信しているため、このブランチをマージまたは別URLへ公開するまではPythonエディターが表示されません。
+この`feature/python-control-ui`ブランチはPython制御版です。`main`の安定版は変更せず残し、GitHub Pagesの別パスへ公開しています。
 
-公開URL（GitHub Pages）:
+Python版URL（GitHub Pages）:
+
+<https://1999tanaka.github.io/DPS150/python/>
+
+安定版URL:
 
 <https://1999tanaka.github.io/DPS150/>
 
