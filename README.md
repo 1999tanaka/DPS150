@@ -71,6 +71,8 @@ Python計算とシリアル通信のため、実際の実行時間は多少長�
 
 13.5 V、電流制限0.100 Aを200回出力します。Control Cycleが50 msの場合は約10秒です。
 
+![固定電圧13.5 V・電流制限0.100 Aのグラフ](docs/sample-graphs/fixed-output.svg)
+
 ```python
 def control(Vmax, Amax):
     A = min(Amax, 0.100)
@@ -83,6 +85,8 @@ def control(Vmax, Amax):
 ### ステップ電圧
 
 13 Vを40回、14 Vを100回、13 Vを40回出力します。Control Cycleが50 msの場合は2秒、5秒、2秒のステップになります。
+
+![13 V、14 V、13 Vのステップ電圧グラフ](docs/sample-graphs/step-output.svg)
 
 ```python
 def control(Vmax, Amax):
@@ -102,6 +106,8 @@ def control(Vmax, Amax):
 ### サイン波
 
 中心13.5 V、振幅0.5 Vのサイン波を3周期出力します。1周期100点なので、Control Cycleが50 msの場合の周期は5秒です。
+
+![中心13.5 V・振幅0.5 V・周期5秒のサイン波グラフ](docs/sample-graphs/sine-output.svg)
 
 ```python
 import math
@@ -129,6 +135,8 @@ def control(Vmax, Amax):
 ### ランプ電圧
 
 13 Vから14 Vまで100ステップで直線的に上昇させます。Control Cycleが50 msの場合は約5秒です。
+
+![13 Vから14 Vまでのランプ電圧グラフ](docs/sample-graphs/ramp-output.svg)
 
 ```python
 def control(Vmax, Amax):

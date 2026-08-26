@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="250" viewBox="0 0 760 250" role="img" aria-labelledby="title desc">
+  <title id="title">サイン波電圧の出力例</title>
+  <desc id="desc">Control Cycle 50ミリ秒で、中心13.5ボルト、振幅0.5ボルト、周期5秒のサイン波を3周期出力し、電流制限を0.100アンペアに維持するグラフ。</desc>
+  <rect width="760" height="250" rx="12" fill="#07111d"/>
+  <text x="24" y="28" fill="#e7f2f5" font-family="sans-serif" font-size="16" font-weight="600">Sine output · T = 5 s · 3 cycles · Control Cycle 50 ms</text>
+  <g stroke="#263846" stroke-width="1">
+    <path d="M70 48H732M70 101H732M70 154H732"/>
+    <path d="M70 48V154M291 48V154M511 48V154M732 48V154"/>
+  </g>
+  <rect x="70" y="48" width="662" height="106" fill="none" stroke="#506574"/>
+  <g fill="#9db0ba" font-family="sans-serif" font-size="11">
+    <text x="35" y="52">14.0</text><text x="35" y="105">13.5</text><text x="35" y="158">13.0</text>
+    <text x="67" y="173">0</text><text x="287" y="173">5</text><text x="504" y="173">10</text><text x="724" y="173">15</text>
+    <text x="10" y="105" transform="rotate(-90 10 105)">Voltage [V]</text>
+    <text x="374" y="188">Time [s]</text>
+  </g>
+  <polyline points="70.0,101.0 81.0,84.6 92.1,69.8 103.1,58.1 114.1,50.6 125.2,48.0 136.2,50.6 147.2,58.1 158.3,69.8 169.3,84.6 180.3,101.0 191.4,117.4 202.4,132.2 213.4,143.9 224.5,151.4 235.5,154.0 246.5,151.4 257.6,143.9 268.6,132.2 279.6,117.4 290.7,101.0 301.7,84.6 312.7,69.8 323.8,58.1 334.8,50.6 345.8,48.0 356.9,50.6 367.9,58.1 378.9,69.8 390.0,84.6 401.0,101.0 412.0,117.4 423.1,132.2 434.1,143.9 445.1,151.4 456.2,154.0 467.2,151.4 478.2,143.9 489.3,132.2 500.3,117.4 511.3,101.0 522.4,84.6 533.4,69.8 544.4,58.1 555.5,50.6 566.5,48.0 577.5,50.6 588.6,58.1 599.6,69.8 610.6,84.6 621.7,101.0 632.7,117.4 643.7,132.2 654.8,143.9 665.8,151.4 676.8,154.0 687.9,151.4 698.9,143.9 709.9,132.2 721.0,117.4 732.0,101.0" fill="none" stroke="#37d6cf" stroke-width="3" stroke-linejoin="round"/>
+  <text x="610" y="63" fill="#8cf1ec" font-family="sans-serif" font-size="12">13.5 ± 0.5 V</text>
+  <rect x="70" y="202" width="662" height="26" fill="#0b1a26" stroke="#506574"/>
+  <path d="M240 215H732" fill="none" stroke="#ffb347" stroke-width="3"/>
+  <text x="78" y="220" fill="#ffcf89" font-family="sans-serif" font-size="12">Current limit 0.100 A</text>
+</svg>
