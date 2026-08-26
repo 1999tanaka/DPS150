@@ -27,10 +27,11 @@ Python版URL（GitHub Pages）:
 3. `CONNECT DEVICE`を押し、DPS-150のシリアルポートを選択します。
 4. 試験対象に適したVmaxとAmax、Control Cycleを入力します。
 5. 画面の`control.py`へ電圧・電流の制御式を書き、`CHECK PYTHON`で構文と初期値を確認します。
-6. `control(Vmax, Amax)`ジェネレーターの内容を確認して`START`を押します。
-7. 確認画面で配線と安全上限の確認にチェックし、`START OUTPUT`を押します。
-8. 実行中はページを前面に保ち、PCをスリープさせないでください。
-9. 終了後、必要に応じて`DOWNLOAD CSV`からログを保存します。
+6. `PREVIEW WAVEFORM`で、DPS-150へ出力せずに予定電圧・電流制限の全体グラフを確認します。
+7. `control(Vmax, Amax)`ジェネレーターの内容を確認して`START`を押します。
+8. 確認画面で配線と安全上限の確認にチェックし、`START OUTPUT`を押します。
+9. 実行中はページを前面に保ち、PCをスリープさせないでください。
+10. 終了後、必要に応じて`DOWNLOAD CSV`からログを保存します。
 
 会社PCへのPython、Node.js、専用アプリのインストールは不要です。同梱したPyodideがPythonをWebAssemblyとしてブラウザ内で実行します。Web SerialはSecure Contextが必要なため、GitHub PagesのHTTPS URLから利用してください。FirefoxとSafariは対象外です。
 
@@ -54,6 +55,14 @@ def control(Vmax, Amax):
 `Vmax`と`Amax`は画面で指定した上限です。`i`はPython自身の`for`ループで管理します。各回の指令は電流制限を先、電圧を後にした`yield A, V`または`yield {"A": A, "V": V}`です。`break`、`range()`の終了、関数末尾への到達で正常終了し、OUTPUT OFFします。
 
 Python内に`time.sleep()`を書く必要はありません。画面側がControl Cycleの時間だけ待ってからジェネレーターを次へ進めます。Python側でもsleepするとその時間が追加され、周期が長くなるため使用しないでください。
+
+### 出力前波形プレビュー
+
+`PREVIEW WAVEFORM`を押すと、Vmax・Amax・Control Cycleと現在のPythonコードから予定波形を生成し、設定電圧と電流制限を別グラフで表示します。各`yield`の指令値をControl Cycleの間保持するため、グラフも補間せず階段状に描画します。この処理ではWeb Serialコマンドを送信せず、DPS-150のOUTPUTも変更しません。
+
+表示されるのはPythonが生成する予定指令値であり、DPS-150の実測応答ではありません。実際の出力電圧・電流は実行中のリアルタイムグラフや外部測定器で確認してください。
+
+プレビューには点数、予定時間、電圧範囲、電流制限範囲も表示します。無限ジェネレーターや非常に長い条件では先頭10,000点までを表示し、実際の出力がその先も継続することを警告します。プレビュー時にもVmax・Amaxの安全チェックを行い、範囲外の値がある場合はグラフを表示せずエラーにします。
 
 ## サンプルプログラム
 
@@ -173,6 +182,7 @@ Control Cycleは`performance.now()`を基準にスケジュールします。Pyt
 - 電圧・Current Limit設定、OUTPUT ON/OFF
 - Vmax / AmaxとPythonの`for i in range(...)`を使った周期制御
 - WebUI内のPythonによる電流制限・電圧指令生成と`break`による正常終了
+- DPS-150へコマンドを送らない出力前波形プレビュー（電圧・電流制限、最大10,000点）
 - Pythonを分離Workerで実行し、ハング時はWorker終了・OUTPUT OFF
 - Python指令値の有限値・電圧上限・電流安全上限チェック
 - STOP最優先制御、二重START防止、実行中の設定ロック

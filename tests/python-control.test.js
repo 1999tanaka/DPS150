@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { validatePythonControlResult } from "../js/python-control.js";
+import {
+  validatePythonControlResult,
+  validatePythonPreviewResult,
+} from "../js/python-control.js";
 
 test("accepts finite Python voltage and current inside the safety limits", () => {
   const result = validatePythonControlResult(
@@ -24,4 +27,27 @@ test("rejects unsafe or non-finite Python control values", () => {
   assert.throws(() => validatePythonControlResult({ voltage: 13, current: 0.3 }, limits));
   assert.throws(() => validatePythonControlResult({ voltage: Number.NaN, current: 0.1 }, limits));
   assert.throws(() => validatePythonControlResult({ voltage: 13, current: 0 }, limits));
+});
+
+test("validates a flat Python waveform preview", () => {
+  const preview = validatePythonPreviewResult({
+    truncated: false,
+    flatPoints: [0.1, 13, 0.1, 14, 0.05, 13.5],
+  }, { maxVoltage: 14, maxCurrent: 0.1 });
+
+  assert.equal(preview.truncated, false);
+  assert.deepEqual(preview.points, [
+    { current: 0.1, voltage: 13 },
+    { current: 0.1, voltage: 14 },
+    { current: 0.05, voltage: 13.5 },
+  ]);
+  assert.equal(Object.isFrozen(preview.points), true);
+});
+
+test("rejects malformed or unsafe Python waveform previews", () => {
+  assert.throws(() => validatePythonPreviewResult({ flatPoints: [0.1] }));
+  assert.throws(() => validatePythonPreviewResult(
+    { flatPoints: [0.2, 13] },
+    { maxVoltage: 14, maxCurrent: 0.1 },
+  ));
 });

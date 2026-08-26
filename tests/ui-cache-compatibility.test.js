@@ -18,8 +18,15 @@ test("loads the entry module with a cache-busting version", () => {
 test("includes the browser Python editor and a same-origin module worker policy", () => {
   assert.match(html, /id="python-code"/);
   assert.match(html, /id="check-python"/);
+  assert.match(html, /id="preview-python"/);
+  assert.match(html, /id="preview-dialog"/);
   assert.match(html, /worker-src 'self'/);
   assert.match(html, /script-src 'self' 'wasm-unsafe-eval'/);
+});
+
+test("labels waveform preview as a no-output operation", () => {
+  assert.match(html, /DPS-150へコマンドを送信せず/);
+  assert.match(html, /Preview only · No serial command sent/);
 });
 
 test("allows current UI elements to be absent in a cached older document", () => {

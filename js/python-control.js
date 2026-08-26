@@ -1,6 +1,8 @@
 const READY_TIMEOUT_MS = 30_000;
 const COMPILE_TIMEOUT_MS = 3_000;
 const EVALUATION_TIMEOUT_MS = 750;
+const PREVIEW_TIMEOUT_MS = 10_000;
+export const MAX_PREVIEW_POINTS = 10_000;
 
 function asError(value, fallbackMessage) {
   if (value instanceof Error) return value;
@@ -34,9 +36,32 @@ export function validatePythonControlResult(result, limits = {}) {
   return Object.freeze({ done: false, voltage, current });
 }
 
+export function validatePythonPreviewResult(result, limits = {}, maxPoints = MAX_PREVIEW_POINTS) {
+  if (!Array.isArray(result?.flatPoints) || result.flatPoints.length % 2 !== 0) {
+    throw new TypeError("Pythonプレビューデータの形式が不正です。");
+  }
+  if (result.flatPoints.length / 2 > maxPoints) {
+    throw new RangeError(`Pythonプレビューが上限${maxPoints.toLocaleString()}点を超えました。`);
+  }
+
+  const points = [];
+  for (let index = 0; index < result.flatPoints.length; index += 2) {
+    const command = validatePythonControlResult({
+      done: false,
+      current: result.flatPoints[index],
+      voltage: result.flatPoints[index + 1],
+    }, limits);
+    points.push(Object.freeze({ current: command.current, voltage: command.voltage }));
+  }
+  return Object.freeze({
+    truncated: Boolean(result.truncated),
+    points: Object.freeze(points),
+  });
+}
+
 export class PythonControlEngine {
   constructor({
-    workerUrl = new URL("./python-worker.js?v=20260826.1", import.meta.url),
+    workerUrl = new URL("./python-worker.js?v=20260826.2", import.meta.url),
     workerFactory = (url, options) => new Worker(url, options),
   } = {}) {
     this.workerUrl = workerUrl;
@@ -80,6 +105,21 @@ export class PythonControlEngine {
     }
     const result = await this.request("evaluate", {}, EVALUATION_TIMEOUT_MS);
     return validatePythonControlResult(result, limits);
+  }
+
+  async preview(context, limits = {}, { maxPoints = MAX_PREVIEW_POINTS } = {}) {
+    if (!this.worker || !this.activeSource) {
+      throw new Error("Python制御コードが準備されていません。");
+    }
+    if (!Number.isInteger(maxPoints) || maxPoints < 1 || maxPoints > MAX_PREVIEW_POINTS) {
+      throw new RangeError(`プレビュー点数は1～${MAX_PREVIEW_POINTS.toLocaleString()}点にしてください。`);
+    }
+    const result = await this.request(
+      "preview",
+      { context, maxPoints },
+      PREVIEW_TIMEOUT_MS,
+    );
+    return validatePythonPreviewResult(result, limits, maxPoints);
   }
 
   createWorker() {
@@ -141,7 +181,9 @@ export class PythonControlEngine {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        const label = ["begin", "evaluate"].includes(type) ? "Python制御関数" : "Pythonコードの準備";
+        const label = ["begin", "evaluate", "preview"].includes(type)
+          ? "Python制御関数"
+          : "Pythonコードの準備";
         const error = new Error(`${label}が${timeoutMs} ms以内に完了しませんでした。`);
         this.terminate(error);
       }, timeoutMs);

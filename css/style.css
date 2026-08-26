@@ -571,6 +571,7 @@ select {
 }
 
 .python-status {
+  flex: 1 1 180px;
   overflow: hidden;
   color: var(--subtle);
   font: 600 9px var(--mono);
@@ -589,11 +590,24 @@ select {
   color: #ff9ca3;
 }
 
+.python-editor-actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+
 .python-check {
   flex: 0 0 auto;
   min-height: 34px;
   padding: 0 12px;
   font-size: 9px;
+}
+
+.python-preview {
+  border-color: rgba(55, 214, 207, 0.45);
+  color: #8cebe6;
 }
 
 .python-contract {
@@ -1133,6 +1147,85 @@ select {
   padding: 27px;
 }
 
+.preview-dialog {
+  width: min(940px, calc(100% - 30px));
+  max-height: calc(100vh - 30px);
+}
+
+.preview-dialog form {
+  max-height: calc(100vh - 30px);
+  overflow-y: auto;
+}
+
+.preview-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0 0 18px;
+  border-block: 1px solid var(--line);
+}
+
+.preview-summary > div {
+  min-width: 0;
+  padding: 10px 12px;
+  border-right: 1px solid var(--line);
+}
+
+.preview-summary > div:last-child {
+  border-right: 0;
+}
+
+.preview-summary dt {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font: 650 9px var(--mono);
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.preview-summary dd {
+  overflow: hidden;
+  margin: 0;
+  color: #dcebef;
+  font: 650 12px var(--mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-graphs {
+  display: grid;
+  gap: 14px;
+}
+
+.preview-graphs figure {
+  margin: 0;
+}
+
+.preview-graphs figcaption {
+  margin-bottom: 6px;
+  color: var(--subtle);
+  font: 700 9px var(--mono);
+  letter-spacing: 0.1em;
+}
+
+.preview-graph {
+  display: block;
+  width: 100%;
+  height: 215px;
+  border: 1px solid rgba(31, 50, 67, 0.82);
+  border-radius: 7px;
+  background: #061019;
+}
+
+.preview-note {
+  margin: 12px 0 0;
+  color: var(--cyan);
+  font: 650 10px var(--mono);
+}
+
+.preview-note.preview-truncated {
+  color: var(--orange);
+}
+
 .confirm-dialog h2 {
   margin-top: 7px;
   font-size: 25px;
@@ -1351,6 +1444,32 @@ select {
 
   .dual-grid {
     grid-template-columns: 1fr;
+  }
+
+  .python-editor-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .python-editor-actions,
+  .python-editor-actions .button {
+    width: 100%;
+  }
+
+  .preview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .preview-summary > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .preview-summary > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .preview-graph {
+    height: 180px;
   }
 
   .app-footer {

@@ -7,7 +7,7 @@
   <meta name="description" content="FNIRSI DPS-150の電圧・電流指令をブラウザ内PythonとWeb Serialで自動制御するローカル制御アプリ">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
   <title>FNIRSI DPS-150 Python Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260826.1">
+  <link rel="stylesheet" href="css/style.css?v=20260826.2">
 </head>
 <body>
   <noscript>
@@ -138,7 +138,10 @@
         yield A, V</textarea>
           <div class="python-editor-footer">
             <span id="python-status" class="python-status" role="status">Not checked</span>
-            <button id="check-python" class="button button-secondary python-check" type="button">CHECK PYTHON</button>
+            <div class="python-editor-actions">
+              <button id="check-python" class="button button-secondary python-check" type="button">CHECK PYTHON</button>
+              <button id="preview-python" class="button button-secondary python-check python-preview" type="button">PREVIEW WAVEFORM</button>
+            </div>
           </div>
           <p class="python-contract">
             <strong>Inputs:</strong> Vmax [V]、Amax [A]。iはPythonの<code>for</code>で管理します。
@@ -314,6 +317,34 @@
     <span>Chrome / Edge · Web Serial · Secure Context</span>
   </footer>
 
+  <dialog id="preview-dialog" class="confirm-dialog preview-dialog" aria-labelledby="preview-title">
+    <form method="dialog">
+      <p class="section-index">OUTPUT PREVIEW</p>
+      <h2 id="preview-title">Planned waveform</h2>
+      <p class="dialog-lead">DPS-150へコマンドを送信せず、Pythonが生成する予定指令をControl Cycleごとの階段波形で表示しています。</p>
+      <dl class="preview-summary">
+        <div><dt>Points</dt><dd id="preview-points">—</dd></div>
+        <div><dt>Duration</dt><dd id="preview-duration">—</dd></div>
+        <div><dt>Voltage</dt><dd id="preview-voltage-range">—</dd></div>
+        <div><dt>Current limit</dt><dd id="preview-current-range">—</dd></div>
+      </dl>
+      <div class="preview-graphs">
+        <figure>
+          <figcaption>COMMAND VOLTAGE [V]</figcaption>
+          <canvas id="preview-voltage-graph" class="preview-graph" aria-label="出力予定の設定電圧グラフ"></canvas>
+        </figure>
+        <figure>
+          <figcaption>CURRENT LIMIT [A]</figcaption>
+          <canvas id="preview-current-graph" class="preview-graph" aria-label="出力予定の電流制限グラフ"></canvas>
+        </figure>
+      </div>
+      <p id="preview-note" class="preview-note">Preview only · No serial command sent.</p>
+      <div class="dialog-actions">
+        <button class="button button-secondary" value="close" type="submit">CLOSE</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="start-dialog" class="confirm-dialog" aria-labelledby="confirm-title">
     <form method="dialog">
       <p class="section-index">EXPERIMENT CHECK</p>
@@ -338,6 +369,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260826.1"></script>
+  <script type="module" src="js/main.js?v=20260826.2"></script>
 </body>
 </html>

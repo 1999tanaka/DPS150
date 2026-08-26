@@ -6,7 +6,7 @@
   "description": "Browser-only Web Serial controller for FNIRSI DPS-150 automated voltage waveforms",
   "scripts": {
     "test": "node --test",
-    "check": "node --check js/main.js && node --check js/dps150.js && node --check js/waveform.js && node --check js/experiment.js && node --check js/graph.js && node --check js/logger.js && node --check js/python-control.js && node --check js/python-worker.js"
+    "check": "node --check js/main.js && node --check js/dps150.js && node --check js/waveform.js && node --check js/experiment.js && node --check js/graph.js && node --check js/preview-graph.js && node --check js/logger.js && node --check js/python-control.js && node --check js/python-worker.js"
   },
   "license": "MIT"
 }

@@ -1,9 +1,13 @@
-import { DPS150 } from "./dps150.js?v=20260826.1";
-import { ExperimentController } from "./experiment.js?v=20260826.1";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260826.1";
-import { ExperimentLogger } from "./logger.js?v=20260826.1";
-import { PythonControlEngine } from "./python-control.js?v=20260826.1";
-import { formatDuration, validateExperimentConfig } from "./waveform.js?v=20260826.1";
+import { DPS150 } from "./dps150.js?v=20260826.2";
+import { ExperimentController } from "./experiment.js?v=20260826.2";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260826.2";
+import { ExperimentLogger } from "./logger.js?v=20260826.2";
+import {
+  PlannedWaveformGraph,
+  PREVIEW_GRAPH_COLORS,
+} from "./preview-graph.js?v=20260826.2";
+import { PythonControlEngine } from "./python-control.js?v=20260826.2";
+import { formatDuration, validateExperimentConfig } from "./waveform.js?v=20260826.2";
 
 const byId = (id) => document.getElementById(id);
 
@@ -22,6 +26,7 @@ const elements = {
   controlCycle: byId("control-cycle"),
   pythonCode: byId("python-code"),
   checkPython: byId("check-python"),
+  previewPython: byId("preview-python"),
   pythonStatus: byId("python-status"),
   pythonRuntimeBadge: byId("python-runtime-badge"),
   voltageRange: byId("voltage-range"),
@@ -50,6 +55,14 @@ const elements = {
   voltageTelemetryRate: byId("voltage-telemetry-rate"),
   currentTelemetryRate: byId("current-telemetry-rate"),
   downloadCsv: byId("download-csv"),
+  previewDialog: byId("preview-dialog"),
+  previewPoints: byId("preview-points"),
+  previewDuration: byId("preview-duration"),
+  previewVoltageRange: byId("preview-voltage-range"),
+  previewCurrentRange: byId("preview-current-range"),
+  previewNote: byId("preview-note"),
+  previewVoltageCanvas: byId("preview-voltage-graph"),
+  previewCurrentCanvas: byId("preview-current-graph"),
   startDialog: byId("start-dialog"),
   safetyConfirm: byId("safety-confirm"),
   confirmStart: byId("confirm-start"),
@@ -65,6 +78,14 @@ const device = new DPS150();
 const logger = new ExperimentLogger();
 const pythonControl = new PythonControlEngine();
 const voltageGraph = new VoltageGraph(elements.voltageGraphCanvas);
+const previewVoltageGraph = new PlannedWaveformGraph(elements.previewVoltageCanvas, {
+  key: "commandVoltage",
+  color: PREVIEW_GRAPH_COLORS.voltage,
+});
+const previewCurrentGraph = new PlannedWaveformGraph(elements.previewCurrentCanvas, {
+  key: "commandCurrent",
+  color: PREVIEW_GRAPH_COLORS.current,
+});
 // Current UI elements were added after the first public version. Treat them as
 // optional so a briefly cached older index.html cannot abort an active run.
 const currentGraph = elements.currentGraphCanvas
@@ -113,6 +134,21 @@ function numericText(value, digits) {
   return Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
+function numericRange(values, digits, unit) {
+  const finiteValues = values.filter(Number.isFinite);
+  if (finiteValues.length === 0) return "—";
+  const min = Math.min(...finiteValues);
+  const max = Math.max(...finiteValues);
+  if (Math.abs(max - min) < 10 ** (-digits)) return `${min.toFixed(digits)} ${unit}`;
+  return `${min.toFixed(digits)}—${max.toFixed(digits)} ${unit}`;
+}
+
+function preciseDuration(seconds) {
+  if (!Number.isFinite(seconds)) return "—";
+  if (seconds < 60) return `${seconds.toFixed(3)} s`;
+  return `${formatDuration(seconds)} (${seconds.toFixed(3)} s)`;
+}
+
 function logSummary(recordCount) {
   const base = `${recordCount.toLocaleString()}件のログ`;
   return logger.truncated ? `${base}（上限到達のため以降は省略）` : base;
@@ -123,6 +159,7 @@ function setFormDisabled(disabled) {
     control.disabled = disabled;
   }
   elements.checkPython.disabled = disabled || pythonBusy;
+  elements.previewPython.disabled = disabled || pythonBusy;
 }
 
 function updateButtons() {
@@ -139,6 +176,7 @@ function updateButtons() {
     || pythonBusy;
   elements.stopButton.disabled = !experiment.running;
   elements.checkPython.disabled = experiment.running || pythonBusy || !hasPythonCode;
+  elements.previewPython.disabled = experiment.running || pythonBusy || !hasPythonCode;
 }
 
 function updateDeviceState(state = device.getState()) {
@@ -328,10 +366,79 @@ async function handleCheckPython() {
   }
 }
 
+async function handlePreviewPython() {
+  if (experiment.running || pythonBusy) return;
+  const source = elements.pythonCode.value.trim();
+  if (!source) {
+    elements.pythonStatus.textContent = "Pythonコードを入力してください。";
+    elements.pythonStatus.className = "python-status python-status-error";
+    return;
+  }
+
+  pythonBusy = true;
+  elements.pythonStatus.textContent = "Generating waveform preview…";
+  elements.pythonStatus.className = "python-status python-status-loading";
+  updateButtons();
+  try {
+    const config = getConfig();
+    const runtime = await pythonControl.prepare(source);
+    const preview = await pythonControl.preview({
+      Vmax: config.voltageMax,
+      Amax: config.currentMax,
+    }, {
+      maxVoltage: Math.min(config.voltageMax, config.deviceMaxVoltage),
+      maxCurrent: Math.min(config.currentMax, config.deviceMaxCurrent),
+    });
+    if (preview.points.length === 0) {
+      throw new Error("Pythonジェネレーターが波形点を1件もyieldしませんでした。");
+    }
+
+    const intervalSeconds = config.controlCycleMs / 1_000;
+    const durationSeconds = preview.points.length * intervalSeconds;
+    const points = preview.points.map((point, index) => ({
+      time: index * intervalSeconds,
+      commandVoltage: point.voltage,
+      commandCurrent: point.current,
+    }));
+    const voltages = points.map((point) => point.commandVoltage);
+    const currents = points.map((point) => point.commandCurrent);
+
+    elements.previewPoints.textContent = preview.truncated
+      ? `${preview.points.length.toLocaleString()}+ (truncated)`
+      : preview.points.length.toLocaleString();
+    elements.previewDuration.textContent = `${preview.truncated ? "≥ " : ""}${preciseDuration(durationSeconds)}`;
+    elements.previewVoltageRange.textContent = numericRange(voltages, 3, "V");
+    elements.previewCurrentRange.textContent = numericRange(currents, 3, "A");
+    elements.previewNote.textContent = preview.truncated
+      ? "Preview limit reached · Actual output continues beyond the displayed 10,000 points."
+      : "Preview only · No serial command sent.";
+    elements.previewNote.className = `preview-note${preview.truncated ? " preview-truncated" : ""}`;
+    elements.pythonRuntimeBadge.textContent = `Python ${runtime.version} · Worker`;
+    elements.pythonStatus.textContent = `Preview ready · ${preview.points.length.toLocaleString()} points · no output`;
+    elements.pythonStatus.className = "python-status python-status-ready";
+    setValidation();
+
+    if (elements.previewDialog.open) elements.previewDialog.close();
+    elements.previewDialog.showModal();
+    previewVoltageGraph.setData(points, durationSeconds);
+    previewCurrentGraph.setData(points, durationSeconds);
+  } catch (error) {
+    previewVoltageGraph.clear();
+    previewCurrentGraph.clear();
+    elements.pythonStatus.textContent = `Preview error: ${error.message}`;
+    elements.pythonStatus.className = "python-status python-status-error";
+    setValidation(error.message);
+  } finally {
+    pythonBusy = false;
+    updateButtons();
+  }
+}
+
 elements.connectButton.addEventListener("click", handleConnect);
 elements.startButton.addEventListener("click", openStartConfirmation);
 elements.stopButton.addEventListener("click", handleStop);
 elements.checkPython.addEventListener("click", handleCheckPython);
+elements.previewPython.addEventListener("click", handlePreviewPython);
 elements.settingsForm.addEventListener("submit", (event) => event.preventDefault());
 elements.settingsForm.addEventListener("input", () => {
   setValidation();
