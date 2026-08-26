@@ -55,6 +55,96 @@ def control(Vmax, Amax):
 
 Python内に`time.sleep()`を書く必要はありません。画面側がControl Cycleの時間だけ待ってからジェネレーターを次へ進めます。Python側でもsleepするとその時間が追加され、周期が長くなるため使用しないでください。
 
+## サンプルプログラム
+
+以下はWeb画面の`control.py`欄へそのまま貼り付けられます。すべて`A`が電流制限[A]、`V`が設定電圧[V]で、`yield A, V`の順です。画面で指定したVmax・Amaxを超えないように制限しています。
+
+実行時間の目安は次式です。
+
+```text
+実行時間 [s] ≒ yield回数 × Control Cycle [ms] / 1000
+```
+
+Python計算とシリアル通信のため、実際の実行時間は多少長くなることがあります。`for`の終了、`break`、またはSTOPで制御を終了し、DPS-150へOUTPUT OFFを送ります。
+
+### 固定電圧・固定電流制限
+
+13.5 V、電流制限0.100 Aを200回出力します。Control Cycleが50 msの場合は約10秒です。
+
+```python
+def control(Vmax, Amax):
+    A = min(Amax, 0.100)
+    V = max(0.0, min(Vmax, 13.500))
+
+    for i in range(200):
+        yield A, V
+```
+
+### ステップ電圧
+
+13 Vを40回、14 Vを100回、13 Vを40回出力します。Control Cycleが50 msの場合は2秒、5秒、2秒のステップになります。
+
+```python
+def control(Vmax, Amax):
+    A = min(Amax, 0.100)
+    sequence = [
+        (13.0, 40),
+        (14.0, 100),
+        (13.0, 40),
+    ]
+
+    for voltage, count in sequence:
+        V = max(0.0, min(Vmax, voltage))
+        for i in range(count):
+            yield A, V
+```
+
+### サイン波
+
+中心13.5 V、振幅0.5 Vのサイン波を3周期出力します。1周期100点なので、Control Cycleが50 msの場合の周期は5秒です。
+
+```python
+import math
+
+def control(Vmax, Amax):
+    A = min(Amax, 0.100)
+    center = 13.5
+    amplitude = 0.5
+    points_per_period = 100
+    cycles = 3
+
+    for i in range(points_per_period * cycles):
+        phase = 2.0 * math.pi * i / points_per_period
+        voltage = center + amplitude * math.sin(phase)
+        V = max(0.0, min(Vmax, voltage))
+        yield A, V
+```
+
+サイン波の実際の周期は次式で決まります。
+
+```text
+周期 [s] = points_per_period × Control Cycle [ms] / 1000
+```
+
+### ランプ電圧
+
+13 Vから14 Vまで100ステップで直線的に上昇させます。Control Cycleが50 msの場合は約5秒です。
+
+```python
+def control(Vmax, Amax):
+    A = min(Amax, 0.100)
+    start_voltage = 13.0
+    end_voltage = 14.0
+    steps = 100
+
+    for i in range(steps + 1):
+        voltage = start_voltage + (end_voltage - start_voltage) * i / steps
+        V = max(0.0, min(Vmax, voltage))
+        yield A, V
+```
+
+`A = 3`のようにAmaxを超える電流制限を返すと、安全チェックによってDPS-150へ送信せず異常停止します。通常は各サンプルのように`A = min(Amax, 希望電流)`としてください。
+
 PythonはUIやSTOP処理とは別のWeb Workerで動きます。コード準備が3秒、1回の制御計算が750 msを超えた場合はWorkerを強制終了し、DPS-150へOUTPUT OFFを送ります。電圧は0 V以上かつVmax・機器上限以下、電流は0 Aより大きくAmax・機器上限以下でなければ送信しません。外部パッケージのダウンロードは行わず、同梱されたPython標準ライブラリだけを対象とします。
 
 ## デフォルト制御条件
