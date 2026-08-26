@@ -6,6 +6,50 @@ const COLORS = Object.freeze({
   empty: "#506777",
 });
 
+const PREVIEW_PIXELS_PER_POINT = 1;
+const PREVIEW_PIXELS_PER_SECOND = 24;
+export const MAX_PREVIEW_GRAPH_WIDTH = 10_000;
+export const MAX_PREVIEW_RENDER_WIDTH = 20_000;
+
+export function resolvePreviewGraphWidth({
+  pointCount,
+  durationSeconds,
+  viewportWidth,
+}) {
+  const viewport = Math.max(1, Number(viewportWidth) || 0);
+  const pointsWidth = Math.max(0, Number(pointCount) || 0) * PREVIEW_PIXELS_PER_POINT;
+  const timeWidth = Math.max(0, Number(durationSeconds) || 0) * PREVIEW_PIXELS_PER_SECOND;
+  return Math.ceil(Math.min(
+    MAX_PREVIEW_GRAPH_WIDTH,
+    Math.max(viewport, pointsWidth, timeWidth),
+  ));
+}
+
+export function resolveZoomedPreviewGraphWidth({
+  baseWidth,
+  viewportWidth,
+  zoom,
+}) {
+  const viewport = Math.max(1, Number(viewportWidth) || 0);
+  const base = Math.max(viewport, Number(baseWidth) || viewport);
+  if (Number(zoom) === 0) return Math.ceil(viewport);
+  const scale = Math.max(0.01, Number(zoom) || 1);
+  return Math.ceil(Math.min(
+    MAX_PREVIEW_RENDER_WIDTH,
+    Math.max(viewport, base * scale),
+  ));
+}
+
+export function resolvePreviewTimeTickStep(durationSeconds, plotWidth) {
+  const duration = Math.max(0.001, Number(durationSeconds) || 0.001);
+  const targetTickCount = Math.max(2, Math.floor((Number(plotWidth) || 1) / 100));
+  const rawStep = duration / targetTickCount;
+  const magnitude = 10 ** Math.floor(Math.log10(rawStep));
+  const normalized = rawStep / magnitude;
+  const multiplier = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+  return multiplier * magnitude;
+}
+
 export function resolvePreviewYDomain(values, { minimum = 0 } = {}) {
   const finiteValues = values.filter(Number.isFinite);
   if (finiteValues.length === 0) return { min: minimum, max: minimum + 1 };
@@ -94,7 +138,10 @@ export class PlannedWaveformGraph {
     const rect = this.canvas.getBoundingClientRect();
     const width = Math.max(1, rect.width);
     const height = Math.max(1, rect.height);
-    const pixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const desiredPixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+    const maxPixelArea = 4_000_000;
+    const areaLimitedRatio = Math.sqrt(maxPixelArea / (width * height));
+    const pixelRatio = Math.max(1, Math.min(desiredPixelRatio, areaLimitedRatio));
     const targetWidth = Math.round(width * pixelRatio);
     const targetHeight = Math.round(height * pixelRatio);
     if (this.canvas.width !== targetWidth || this.canvas.height !== targetHeight) {
@@ -144,15 +191,17 @@ export class PlannedWaveformGraph {
       ctx.fillText(formatAxisValue(value, yRange), margin.left - 8, y);
     }
 
-    for (let tick = 0; tick <= 5; tick += 1) {
-      const time = (this.durationSeconds * tick) / 5;
+    const timeTickStep = resolvePreviewTimeTickStep(this.durationSeconds, plotWidth);
+    const lastTick = Math.floor(this.durationSeconds / timeTickStep);
+    for (let tick = 0; tick <= lastTick; tick += 1) {
+      const time = timeTickStep * tick;
       const x = xToCanvas(time);
       ctx.beginPath();
       ctx.moveTo(x, margin.top);
       ctx.lineTo(x, height - margin.bottom);
       ctx.stroke();
-      ctx.textAlign = tick === 0 ? "left" : tick === 5 ? "right" : "center";
-      ctx.fillText(formatAxisValue(time, this.durationSeconds), x, height - 15);
+      ctx.textAlign = tick === 0 ? "left" : "center";
+      ctx.fillText(formatAxisValue(time, timeTickStep), x, height - 15);
     }
 
     const stepPoints = buildPreviewStepPoints(this.points, this.durationSeconds, this.key);

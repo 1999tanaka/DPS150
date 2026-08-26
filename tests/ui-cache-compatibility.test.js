@@ -20,6 +20,9 @@ test("includes the browser Python editor and a same-origin module worker policy"
   assert.match(html, /id="check-python"/);
   assert.match(html, /id="preview-python"/);
   assert.match(html, /id="preview-dialog"/);
+  assert.match(html, /id="preview-graph-scroll"/);
+  assert.match(html, /id="preview-zoom"/);
+  assert.match(html, /id="preview-zoom-fit"/);
   assert.match(html, /worker-src 'self'/);
   assert.match(html, /script-src 'self' 'wasm-unsafe-eval'/);
 });

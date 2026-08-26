@@ -1,13 +1,15 @@
-import { DPS150 } from "./dps150.js?v=20260826.2";
-import { ExperimentController } from "./experiment.js?v=20260826.2";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260826.2";
-import { ExperimentLogger } from "./logger.js?v=20260826.2";
+import { DPS150 } from "./dps150.js?v=20260827.1";
+import { ExperimentController } from "./experiment.js?v=20260827.1";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260827.1";
+import { ExperimentLogger } from "./logger.js?v=20260827.1";
 import {
   PlannedWaveformGraph,
   PREVIEW_GRAPH_COLORS,
-} from "./preview-graph.js?v=20260826.2";
-import { PythonControlEngine } from "./python-control.js?v=20260826.2";
-import { formatDuration, validateExperimentConfig } from "./waveform.js?v=20260826.2";
+  resolvePreviewGraphWidth,
+  resolveZoomedPreviewGraphWidth,
+} from "./preview-graph.js?v=20260827.1";
+import { PythonControlEngine } from "./python-control.js?v=20260827.1";
+import { formatDuration, validateExperimentConfig } from "./waveform.js?v=20260827.1";
 
 const byId = (id) => document.getElementById(id);
 
@@ -61,6 +63,14 @@ const elements = {
   previewVoltageRange: byId("preview-voltage-range"),
   previewCurrentRange: byId("preview-current-range"),
   previewNote: byId("preview-note"),
+  previewZoom: byId("preview-zoom"),
+  previewZoomOut: byId("preview-zoom-out"),
+  previewZoomIn: byId("preview-zoom-in"),
+  previewZoomFit: byId("preview-zoom-fit"),
+  previewZoomValue: byId("preview-zoom-value"),
+  previewScrollHint: byId("preview-scroll-hint"),
+  previewGraphScroll: byId("preview-graph-scroll"),
+  previewGraphs: byId("preview-graphs"),
   previewVoltageCanvas: byId("preview-voltage-graph"),
   previewCurrentCanvas: byId("preview-current-graph"),
   startDialog: byId("start-dialog"),
@@ -98,6 +108,8 @@ let activeConfig = null;
 let connectionBusy = false;
 let activeRunPromise = null;
 let pythonBusy = false;
+let previewBaseGraphWidth = 1;
+const PREVIEW_ZOOM_LEVELS = Object.freeze([0, 0.25, 0.5, 1, 2]);
 
 function readFormValues() {
   return {
@@ -147,6 +159,37 @@ function preciseDuration(seconds) {
   if (!Number.isFinite(seconds)) return "—";
   if (seconds < 60) return `${seconds.toFixed(3)} s`;
   return `${formatDuration(seconds)} (${seconds.toFixed(3)} s)`;
+}
+
+function applyPreviewZoom({ preserveCenter = true } = {}) {
+  const index = Math.max(0, Math.min(
+    PREVIEW_ZOOM_LEVELS.length - 1,
+    Number.parseInt(elements.previewZoom.value, 10) || 0,
+  ));
+  const zoom = PREVIEW_ZOOM_LEVELS[index];
+  const viewportWidth = Math.max(1, elements.previewGraphScroll.clientWidth);
+  const previousScrollWidth = Math.max(viewportWidth, elements.previewGraphScroll.scrollWidth);
+  const centerRatio = (
+    elements.previewGraphScroll.scrollLeft + viewportWidth / 2
+  ) / previousScrollWidth;
+  const graphWidth = resolveZoomedPreviewGraphWidth({
+    baseWidth: previewBaseGraphWidth,
+    viewportWidth,
+    zoom,
+  });
+
+  elements.previewGraphs.style.width = `${graphWidth}px`;
+  const nextScrollWidth = Math.max(viewportWidth, elements.previewGraphScroll.scrollWidth);
+  elements.previewGraphScroll.scrollLeft = preserveCenter
+    ? centerRatio * nextScrollWidth - viewportWidth / 2
+    : 0;
+  elements.previewZoomValue.textContent = zoom === 0 ? "FIT" : `${zoom}×`;
+  elements.previewZoomOut.disabled = index === 0;
+  elements.previewZoomIn.disabled = index === PREVIEW_ZOOM_LEVELS.length - 1;
+  elements.previewZoomFit.setAttribute("aria-pressed", String(zoom === 0));
+  elements.previewScrollHint.textContent = graphWidth > viewportWidth + 1
+    ? "↔ 左右へスワイプ／横スクロールして時間位置を移動できます。"
+    : "波形全体を表示しています。拡大すると左右へ移動できます。";
 }
 
 function logSummary(recordCount) {
@@ -420,11 +463,21 @@ async function handlePreviewPython() {
 
     if (elements.previewDialog.open) elements.previewDialog.close();
     elements.previewDialog.showModal();
+    const viewportWidth = elements.previewGraphScroll.clientWidth;
+    previewBaseGraphWidth = resolvePreviewGraphWidth({
+      pointCount: points.length,
+      durationSeconds,
+      viewportWidth,
+    });
+    elements.previewZoom.value = "3";
+    applyPreviewZoom({ preserveCenter: false });
     previewVoltageGraph.setData(points, durationSeconds);
     previewCurrentGraph.setData(points, durationSeconds);
   } catch (error) {
     previewVoltageGraph.clear();
     previewCurrentGraph.clear();
+    elements.previewGraphs.style.width = "";
+    elements.previewGraphScroll.scrollLeft = 0;
     elements.pythonStatus.textContent = `Preview error: ${error.message}`;
     elements.pythonStatus.className = "python-status python-status-error";
     setValidation(error.message);
@@ -439,6 +492,22 @@ elements.startButton.addEventListener("click", openStartConfirmation);
 elements.stopButton.addEventListener("click", handleStop);
 elements.checkPython.addEventListener("click", handleCheckPython);
 elements.previewPython.addEventListener("click", handlePreviewPython);
+elements.previewZoom.addEventListener("input", () => applyPreviewZoom());
+elements.previewZoomOut.addEventListener("click", () => {
+  elements.previewZoom.value = String(Math.max(0, Number(elements.previewZoom.value) - 1));
+  applyPreviewZoom();
+});
+elements.previewZoomIn.addEventListener("click", () => {
+  elements.previewZoom.value = String(Math.min(
+    PREVIEW_ZOOM_LEVELS.length - 1,
+    Number(elements.previewZoom.value) + 1,
+  ));
+  applyPreviewZoom();
+});
+elements.previewZoomFit.addEventListener("click", () => {
+  elements.previewZoom.value = "0";
+  applyPreviewZoom({ preserveCenter: false });
+});
 elements.settingsForm.addEventListener("submit", (event) => event.preventDefault());
 elements.settingsForm.addEventListener("input", () => {
   setValidation();

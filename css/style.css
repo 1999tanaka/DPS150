@@ -1194,6 +1194,108 @@ select {
 .preview-graphs {
   display: grid;
   gap: 14px;
+  min-width: 100%;
+}
+
+.preview-scroll-hint {
+  margin: 0 0 8px;
+  color: var(--subtle);
+  font: 650 10px var(--mono);
+}
+
+.preview-zoom-controls {
+  display: grid;
+  grid-template-columns: auto 34px minmax(110px, 1fr) 34px auto 46px;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(6, 16, 25, 0.72);
+}
+
+.preview-zoom-label,
+.preview-zoom-value {
+  color: var(--subtle);
+  font: 700 9px var(--mono);
+  letter-spacing: 0.08em;
+}
+
+.preview-zoom-value {
+  color: var(--cyan);
+  text-align: right;
+}
+
+.preview-zoom {
+  width: 100%;
+  accent-color: var(--cyan);
+}
+
+.preview-zoom-button,
+.preview-fit-button {
+  min-height: 30px;
+  border: 1px solid rgba(55, 214, 207, 0.38);
+  border-radius: 5px;
+  background: rgba(55, 214, 207, 0.08);
+  color: var(--cyan);
+  font: 700 12px var(--mono);
+  cursor: pointer;
+}
+
+.preview-fit-button {
+  padding-inline: 11px;
+  font-size: 9px;
+}
+
+.preview-fit-button[aria-pressed="true"] {
+  border-color: var(--cyan);
+  background: rgba(55, 214, 207, 0.18);
+  box-shadow: 0 0 0 1px rgba(55, 214, 207, 0.16);
+}
+
+.preview-zoom-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.preview-zoom-button:focus-visible,
+.preview-fit-button:focus-visible,
+.preview-zoom:focus-visible {
+  outline: 2px solid rgba(55, 214, 207, 0.7);
+  outline-offset: 2px;
+}
+
+.preview-graph-scroll {
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 8px;
+  border-radius: 7px;
+  overscroll-behavior-x: contain;
+  scrollbar-color: rgba(55, 214, 207, 0.65) #061019;
+  scrollbar-width: auto;
+  touch-action: pan-x pan-y;
+}
+
+.preview-graph-scroll:focus-visible {
+  outline: 2px solid rgba(55, 214, 207, 0.7);
+  outline-offset: 3px;
+}
+
+.preview-graph-scroll::-webkit-scrollbar {
+  height: 12px;
+}
+
+.preview-graph-scroll::-webkit-scrollbar-track {
+  border-radius: 999px;
+  background: #061019;
+}
+
+.preview-graph-scroll::-webkit-scrollbar-thumb {
+  border: 3px solid #061019;
+  border-radius: 999px;
+  background: rgba(55, 214, 207, 0.65);
 }
 
 .preview-graphs figure {
@@ -1470,6 +1572,14 @@ select {
 
   .preview-graph {
     height: 180px;
+  }
+
+  .preview-zoom-controls {
+    grid-template-columns: 34px minmax(90px, 1fr) 34px auto 42px;
+  }
+
+  .preview-zoom-label {
+    grid-column: 1 / -1;
   }
 
   .app-footer {

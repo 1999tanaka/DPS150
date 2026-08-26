@@ -7,7 +7,7 @@
   <meta name="description" content="FNIRSI DPS-150の電圧・電流指令をブラウザ内PythonとWeb Serialで自動制御するローカル制御アプリ">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
   <title>FNIRSI DPS-150 Python Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260826.2">
+  <link rel="stylesheet" href="css/style.css?v=20260827.1">
 </head>
 <body>
   <noscript>
@@ -328,15 +328,26 @@
         <div><dt>Voltage</dt><dd id="preview-voltage-range">—</dd></div>
         <div><dt>Current limit</dt><dd id="preview-current-range">—</dd></div>
       </dl>
-      <div class="preview-graphs">
-        <figure>
-          <figcaption>COMMAND VOLTAGE [V]</figcaption>
-          <canvas id="preview-voltage-graph" class="preview-graph" aria-label="出力予定の設定電圧グラフ"></canvas>
-        </figure>
-        <figure>
-          <figcaption>CURRENT LIMIT [A]</figcaption>
-          <canvas id="preview-current-graph" class="preview-graph" aria-label="出力予定の電流制限グラフ"></canvas>
-        </figure>
+      <div class="preview-zoom-controls" aria-label="時間軸の拡大縮小">
+        <span class="preview-zoom-label">TIME ZOOM</span>
+        <button id="preview-zoom-out" class="preview-zoom-button" type="button" aria-label="時間軸を縮小">−</button>
+        <input id="preview-zoom" class="preview-zoom" type="range" min="0" max="4" step="1" value="3" aria-label="時間軸ズーム">
+        <button id="preview-zoom-in" class="preview-zoom-button" type="button" aria-label="時間軸を拡大">＋</button>
+        <button id="preview-zoom-fit" class="preview-fit-button" type="button">FIT</button>
+        <output id="preview-zoom-value" class="preview-zoom-value" for="preview-zoom">1×</output>
+      </div>
+      <p id="preview-scroll-hint" class="preview-scroll-hint">長い波形は左右へスワイプ／横スクロールして確認できます。</p>
+      <div id="preview-graph-scroll" class="preview-graph-scroll" tabindex="0" aria-label="予定波形の横スクロール領域">
+        <div id="preview-graphs" class="preview-graphs">
+          <figure>
+            <figcaption>COMMAND VOLTAGE [V]</figcaption>
+            <canvas id="preview-voltage-graph" class="preview-graph" aria-label="出力予定の設定電圧グラフ"></canvas>
+          </figure>
+          <figure>
+            <figcaption>CURRENT LIMIT [A]</figcaption>
+            <canvas id="preview-current-graph" class="preview-graph" aria-label="出力予定の電流制限グラフ"></canvas>
+          </figure>
+        </div>
       </div>
       <p id="preview-note" class="preview-note">Preview only · No serial command sent.</p>
       <div class="dialog-actions">
@@ -369,6 +380,6 @@
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260826.2"></script>
+  <script type="module" src="js/main.js?v=20260827.1"></script>
 </body>
 </html>
