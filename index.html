@@ -7,7 +7,7 @@
   <meta name="description" content="FNIRSI DPS-150の電圧・電流指令をブラウザ内PythonとWeb Serialで自動制御するローカル制御アプリ">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'">
   <title>FNIRSI DPS-150 Python Wave Control</title>
-  <link rel="stylesheet" href="css/style.css?v=20260825.8">
+  <link rel="stylesheet" href="css/style.css?v=20260826.1">
 </head>
 <body>
   <noscript>
@@ -82,74 +82,36 @@
           <span class="safe-chip">LOCAL ONLY</span>
         </div>
 
-        <div class="form-section critical-setting">
-          <label for="current-limit">Python Current Safety Max <span class="required">必須</span></label>
-          <div class="input-with-unit">
-            <input id="current-limit" name="currentLimit" type="number" min="0.001" max="5" step="0.001" placeholder="1.000" inputmode="decimal" required>
-            <span>A</span>
-          </div>
-          <p class="field-help">Pythonが返す電流指令の絶対上限です。試験対象に適した値を入力してください。</p>
+        <div class="form-section critical-setting dual-grid">
+          <label>
+            <span>Voltage Safety Max (Vmax) <span class="required">必須</span></span>
+            <div class="input-with-unit">
+              <input id="voltage-max" name="voltageMax" type="number" min="0.001" max="24" step="0.001" value="14.000" inputmode="decimal" required>
+              <span>V</span>
+            </div>
+          </label>
+          <label>
+            <span>Current Safety Max (Amax) <span class="required">必須</span></span>
+            <div class="input-with-unit">
+              <input id="current-max" name="currentMax" type="number" min="0.001" max="5" step="0.001" value="0.100" inputmode="decimal" required>
+              <span>A</span>
+            </div>
+          </label>
+          <p class="field-help">Pythonへ上限値として渡し、戻り値もこの範囲内か送信前に検査します。</p>
         </div>
 
-        <fieldset class="form-section">
-          <legend>A sweep</legend>
-          <div class="triple-grid">
-            <label>
-              <span>Start</span>
-              <input id="a-start" name="aStart" type="number" min="2" max="14" step="0.1" value="2.0" required>
-            </label>
-            <label>
-              <span>End</span>
-              <input id="a-end" name="aEnd" type="number" min="2" max="14" step="0.1" value="14.0" required>
-            </label>
-            <label>
-              <span>Step</span>
-              <input id="a-step" name="aStep" type="number" min="0.1" max="12" step="0.1" value="0.1" required>
-            </label>
+        <div class="form-section">
+          <label for="control-cycle">Control Cycle</label>
+          <div class="input-with-unit">
+            <select id="control-cycle" name="controlCycle">
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+            <span>ms</span>
           </div>
-        </fieldset>
-
-        <fieldset class="form-section">
-          <legend>Periods</legend>
-          <div class="period-options">
-            <label class="check-card">
-              <input type="checkbox" name="period" value="1" checked>
-              <span class="check-mark" aria-hidden="true"></span>
-              <span><strong>1</strong> sec</span>
-            </label>
-            <label class="check-card">
-              <input type="checkbox" name="period" value="5" checked>
-              <span class="check-mark" aria-hidden="true"></span>
-              <span><strong>5</strong> sec</span>
-            </label>
-            <label class="check-card">
-              <input type="checkbox" name="period" value="10" checked>
-              <span class="check-mark" aria-hidden="true"></span>
-              <span><strong>10</strong> sec</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <div class="form-section dual-grid">
-          <label>
-            <span>Cycles / Period</span>
-            <div class="input-with-unit">
-              <input id="cycles" name="cycles" type="number" min="1" max="99" step="1" value="3" required>
-              <span>cycles</span>
-            </div>
-          </label>
-          <label>
-            <span>Update Interval</span>
-            <div class="input-with-unit">
-              <select id="update-interval" name="updateInterval">
-                <option value="10">10</option>
-                <option value="20">20</option>
-                <option value="50" selected>50</option>
-                <option value="100">100</option>
-              </select>
-              <span>ms</span>
-            </div>
-          </label>
+          <p class="field-help">Pythonジェネレーターをこの周期ごとに1回進め、次の<code>yield A, V</code>を取得します。</p>
         </div>
 
         <section class="python-editor-section" aria-labelledby="python-editor-title">
@@ -161,34 +123,34 @@
             <span id="python-runtime-badge" class="python-runtime-badge">Pyodide 314.0.6</span>
           </div>
           <p class="python-editor-help">
-            各更新点で <code>control(t, A, T, cycle)</code> を実行します。戻り値の電圧・電流は送信前に安全範囲を検査します。
+            <code>for i in range(...)</code>をそのまま使えます。各回は<code>yield A, V</code>、<code>break</code>またはループ終了で正常終了してOUTPUT OFFします。待機はControl Cycleが自動で行います。
           </p>
           <label class="python-code-label" for="python-code">control.py</label>
-          <textarea id="python-code" name="pythonSource" class="python-code" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off">import math
+          <textarea id="python-code" name="pythonSource" class="python-code" rows="14" spellcheck="false" autocapitalize="off" autocomplete="off">def control(Vmax, Amax):
+    Imax = 100
 
-def control(t, A, T, cycle):
-    voltage = (
-        (7 + A / 2)
-        + (7 - A / 2)
-        * math.sin(2 * math.pi * t / T)
-    )
-    current = 0.100
-    return {"voltage": voltage, "current": current}</textarea>
+    for i in range(10000):
+        if i >= Imax:
+            break
+
+        A = min(Amax, 0.100)
+        V = min(Vmax, 13.0 + 0.01 * i)
+        yield A, V</textarea>
           <div class="python-editor-footer">
             <span id="python-status" class="python-status" role="status">Not checked</span>
             <button id="check-python" class="button button-secondary python-check" type="button">CHECK PYTHON</button>
           </div>
           <p class="python-contract">
-            <strong>Inputs:</strong> t = 現在の周期条件での経過秒、A、T [s]、cycle。
-            <strong>Output:</strong> <code>{"voltage": V, "current": A}</code> または <code>(V, A)</code>。
+            <strong>Inputs:</strong> Vmax [V]、Amax [A]。iはPythonの<code>for</code>で管理します。
+            <strong>Output:</strong> 各回<code>yield (A, V)</code>。<code>break</code>またはジェネレーター終了で停止。
             標準ライブラリのみ使用できます。
           </p>
         </section>
 
-        <div class="equation-card" aria-label="出力電圧の計算式">
-          <span class="equation-label">DEFAULT PYTHON WAVEFORM</span>
-          <span class="equation">V(t) = (7 + A/2) + (7 − A/2) sin(2πt/T)</span>
-          <span id="voltage-range" class="equation-range">Expected range 2.00—14.00 V</span>
+        <div class="equation-card" aria-label="Python制御契約">
+          <span class="equation-label">CONTROL CONTRACT</span>
+          <span class="equation">control(Vmax, Amax) → yield (A, V)</span>
+          <span id="voltage-range" class="equation-range">Python output safety check 0—14.000 V</span>
         </div>
 
         <div id="validation-message" class="validation-message" role="alert" hidden></div>
@@ -216,36 +178,33 @@ def control(t, A, T, cycle):
         </div>
 
         <div id="status-message" class="status-message status-info" role="status" aria-live="polite">
-          DPS-150を接続し、Python Current Safety Maxを設定してください。
+          DPS-150を接続し、Vmax・Amax・Control Cycleを確認してください。
         </div>
 
         <div class="sequence-strip">
           <div class="sequence-primary">
-            <span class="metric-label">CURRENT A</span>
-            <strong id="current-a">—</strong>
-            <span id="a-total" class="metric-tail">/ 14.0</span>
+            <span class="metric-label">ITERATION</span>
+            <strong id="current-iteration">—</strong>
+            <span class="metric-tail">i</span>
           </div>
           <div>
-            <span class="metric-label">PERIOD</span>
-            <strong id="current-period">—</strong>
+            <span class="metric-label">CONTROL CYCLE</span>
+            <strong id="current-control-cycle">—</strong>
           </div>
           <div>
-            <span class="metric-label">CYCLE</span>
-            <strong id="current-cycle">—</strong>
+            <span class="metric-label">VMAX</span>
+            <strong id="current-vmax">—</strong>
           </div>
           <div>
-            <span class="metric-label">A STEP</span>
-            <strong id="current-step">0 / 121</strong>
+            <span class="metric-label">AMAX</span>
+            <strong id="current-amax">—</strong>
           </div>
         </div>
 
         <div class="progress-block">
           <div class="progress-meta">
-            <span>OVERALL PROGRESS</span>
-            <strong id="progress-percent">0.0%</strong>
-          </div>
-          <div class="progress-track" role="progressbar" aria-label="実験進捗" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
-            <div id="progress-fill" class="progress-fill"></div>
+            <span>STOP CONDITION</span>
+            <strong id="progress-percent">break / generator end</strong>
           </div>
         </div>
 
@@ -256,11 +215,11 @@ def control(t, A, T, cycle):
           </div>
           <div>
             <span class="metric-label">REMAINING</span>
-            <strong id="remaining-time">01:36:48</strong>
+            <strong id="remaining-time">—</strong>
           </div>
           <div>
-            <span class="metric-label">EST. FINISH</span>
-            <strong id="finish-time">—</strong>
+            <span class="metric-label">FINISH</span>
+            <strong id="finish-time">generator end</strong>
           </div>
         </div>
       </div>
@@ -361,16 +320,16 @@ def control(t, A, T, cycle):
       <h2 id="confirm-title">Start experiment?</h2>
       <p class="dialog-lead">出力を開始する前に、配線・負荷・保護設定を確認してください。</p>
       <dl class="confirm-summary">
-        <div><dt>A</dt><dd id="confirm-a">2.0 → 14.0 / 0.1</dd></div>
-        <div><dt>Periods</dt><dd id="confirm-periods">1 / 5 / 10 sec</dd></div>
-        <div><dt>Cycles</dt><dd id="confirm-cycles">3 each</dd></div>
-        <div><dt>Duration</dt><dd id="confirm-duration">01:36:48</dd></div>
+        <div><dt>Vmax</dt><dd id="confirm-vmax">14.000 V</dd></div>
+        <div><dt>Amax</dt><dd id="confirm-amax">0.100 A</dd></div>
+        <div><dt>Control Cycle</dt><dd id="confirm-cycle">50 ms</dd></div>
+        <div><dt>Stop</dt><dd id="confirm-stop">break / generator end</dd></div>
         <div><dt>Control</dt><dd id="confirm-control">Browser Python</dd></div>
-        <div class="confirm-critical"><dt>Current Safety Max</dt><dd id="confirm-current">— A</dd></div>
+        <div class="confirm-critical"><dt>Yield order</dt><dd id="confirm-return">A, V</dd></div>
       </dl>
       <label class="safety-confirmation">
         <input id="safety-confirm" type="checkbox">
-        <span>配線とPython Current Safety Maxを確認しました</span>
+        <span>配線とVmax・Amaxを確認しました</span>
       </label>
       <div class="dialog-actions">
         <button class="button button-secondary" value="cancel" type="submit">CANCEL</button>
@@ -379,6 +338,6 @@ def control(t, A, T, cycle):
     </form>
   </dialog>
 
-  <script type="module" src="js/main.js?v=20260825.8"></script>
+  <script type="module" src="js/main.js?v=20260826.1"></script>
 </body>
 </html>

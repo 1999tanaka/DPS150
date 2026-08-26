@@ -19,7 +19,7 @@ class FakeDevice extends EventTarget {
     this.connected = true;
     this.outputEnabled = false;
     this.voltages = [];
-    this.current = null;
+    this.currents = [];
     this.offCalls = 0;
     this.measurementRequests = 0;
     this.measurementSequence = 0;
@@ -27,7 +27,7 @@ class FakeDevice extends EventTarget {
   }
 
   async setCurrent(value) {
-    this.current = value;
+    this.currents.push(value);
   }
 
   async setVoltage(value) {
@@ -67,8 +67,9 @@ class FakeDevice extends EventTarget {
       measurementAgeMs: 0,
       measurementSequence: this.measurementSequence,
       measurementReceivedAtMs: this.measurementReceivedAtMs,
+      setVoltage: this.voltages.at(-1) ?? 0,
       measuredVoltage: this.voltages.at(-1) ?? 0,
-      measuredCurrent: 0.5,
+      measuredCurrent: this.currents.at(-1) ?? 0,
       measuredPower: 4,
       mode: "CV",
       protectionState: "",
@@ -77,88 +78,114 @@ class FakeDevice extends EventTarget {
   }
 }
 
-function shortConfig(duration = 0.04) {
+class FakePythonControl {
+  constructor({ stopAt = 4, command = null } = {}) {
+    this.stopAt = stopAt;
+    this.command = command;
+    this.calls = [];
+    this.i = 0;
+  }
+
+  async prepare(source) {
+    this.calls.push(["prepare", source]);
+    return { version: "test" };
+  }
+
+  async begin(context) {
+    this.calls.push(["begin", context]);
+    this.i = 0;
+    return { started: true };
+  }
+
+  async evaluate(limits) {
+    const i = this.i;
+    this.calls.push(["evaluate", { i }, limits]);
+    if (i >= this.stopAt) return { done: true };
+    this.i += 1;
+    if (this.command) return this.command({ i }, limits);
+    return { done: false, current: 0.1, voltage: 13 + i * 0.01 };
+  }
+
+  terminate() {
+    this.calls.push(["terminate"]);
+  }
+}
+
+function shortConfig(overrides = {}) {
   return {
-    currentLimit: 1,
-    aValues: [2],
-    periods: [duration],
-    cycles: 1,
-    updateInterval: 5,
-    totalDuration: duration,
+    voltageMax: 14,
+    currentMax: 0.2,
+    controlCycleMs: 10,
     deviceMaxVoltage: 24,
+    deviceMaxCurrent: 5,
+    pythonSource: "def control(Vmax, Amax):\n    yield Amax, Vmax",
+    ...overrides,
   };
 }
 
-test("short experiment sets current, runs waveform, and turns output off", async () => {
+test("Python generator controls A and V for each i, then completion turns output off", async () => {
   const device = new FakeDevice();
   const logger = new ExperimentLogger();
-  const controller = new ExperimentController(device, logger);
+  const python = new FakePythonControl({ stopAt: 4 });
+  const controller = new ExperimentController(device, logger, python);
+  const commandTimes = [];
+  controller.addEventListener("progress", (event) => commandTimes.push(event.detail.elapsedSeconds));
   const result = await controller.start(shortConfig());
 
   assert.equal(result.status, "completed");
-  assert.equal(device.current, 1);
-  assert.ok(device.voltages.length >= 2);
+  assert.equal(result.iterations, 4);
+  assert.deepEqual(
+    python.calls.filter(([name]) => name === "evaluate").map(([, context]) => context.i),
+    [0, 1, 2, 3, 4],
+  );
+  assert.deepEqual(
+    python.calls.find(([name]) => name === "begin")?.[1],
+    { Vmax: 14, Amax: 0.2 },
+  );
+  assert.deepEqual(device.voltages, [13, 13.01, 13.02, 13.03]);
+  assert.ok(commandTimes.slice(1).every((time, index) => time - commandTimes[index] >= 0.004));
+  assert.equal(device.currents.at(-1), 0.1);
   assert.equal(device.outputEnabled, false);
   assert.ok(device.offCalls >= 1);
-  assert.ok(logger.size >= 1);
+  assert.ok(logger.size >= 4);
 });
 
-test("STOP interrupts the timer and leaves output off", async () => {
+test("STOP interrupts a run and leaves output off", async () => {
   const device = new FakeDevice();
-  const controller = new ExperimentController(device, new ExperimentLogger());
-  const run = controller.start(shortConfig(0.5));
+  const python = new FakePythonControl({ stopAt: Number.POSITIVE_INFINITY });
+  const controller = new ExperimentController(device, new ExperimentLogger(), python);
+  const run = controller.start(shortConfig());
   setTimeout(() => void controller.stop(), 25);
   const result = await run;
 
   assert.equal(result.status, "stopped");
   assert.equal(device.outputEnabled, false);
   assert.ok(device.offCalls >= 1);
+  assert.ok(python.calls.some(([name]) => name === "terminate"));
 });
 
 test("high-speed polling records individual raw measurement events", async () => {
   const device = new FakeDevice();
   const logger = new ExperimentLogger();
-  const controller = new ExperimentController(device, logger);
-  await controller.start(shortConfig(0.18));
+  const python = new FakePythonControl({ stopAt: 10 });
+  const controller = new ExperimentController(device, logger, python);
+  await controller.start(shortConfig());
 
-  assert.ok(device.measurementRequests >= 2);
+  assert.ok(device.measurementRequests >= 1);
   const measurements = logger.records.filter((record) => record.recordType === "measurement");
   assert.equal(measurements.length, device.measurementRequests);
   assert.ok(measurements.every((record) => Number.isFinite(record.measurementElapsedSeconds)));
 });
 
-test("Python control values drive both voltage and current within the safety ceiling", async () => {
+test("commands outside Vmax/Amax are rejected before being sent", async () => {
   const device = new FakeDevice();
-  const calls = [];
-  const pythonControl = {
-    async prepare(source) {
-      calls.push(["prepare", source]);
-      return { version: "test" };
-    },
-    async evaluate(context) {
-      calls.push(["evaluate", context]);
-      return {
-        voltage: 13 + Math.min(context.t, 1),
-        current: context.t > 0.01 ? 0.15 : 0.1,
-      };
-    },
-    terminate() {
-      calls.push(["terminate"]);
-    },
-  };
-  const controller = new ExperimentController(device, new ExperimentLogger(), pythonControl);
-  const config = {
-    ...shortConfig(0.04),
-    currentLimit: 0.2,
-    pythonSource: "def control(t, A, T, cycle): return (13, 0.1)",
-  };
+  const python = new FakePythonControl({
+    command: () => ({ done: false, current: 0.1, voltage: 14.1 }),
+  });
+  const controller = new ExperimentController(device, new ExperimentLogger(), python);
 
-  const result = await controller.start(config);
-
-  assert.equal(result.status, "completed");
-  assert.ok(calls.some(([name]) => name === "prepare"));
-  assert.ok(calls.filter(([name]) => name === "evaluate").length >= 2);
-  assert.ok(device.voltages.every((voltage) => voltage >= 13 && voltage <= 14));
-  assert.ok(device.current >= 0.1 && device.current <= 0.2);
-  assert.ok(calls.some(([name]) => name === "terminate"));
+  await assert.rejects(() => controller.start(shortConfig()), /Vmax/);
+  assert.deepEqual(device.voltages, []);
+  assert.equal(device.outputEnabled, false);
+  assert.ok(device.offCalls >= 1);
 });

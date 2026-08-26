@@ -2,7 +2,8 @@ import { loadPyodide } from "../vendor/pyodide/pyodide.mjs";
 
 const PYODIDE_INDEX_URL = new URL("../vendor/pyodide/", import.meta.url).href;
 let pyodide;
-let evaluateControl = null;
+let beginControl = null;
+let nextControl = null;
 
 try {
   pyodide = await loadPyodide({ indexURL: PYODIDE_INDEX_URL });
@@ -16,8 +17,10 @@ try {
 }
 
 function disposeEvaluator() {
-  evaluateControl?.destroy?.();
-  evaluateControl = null;
+  beginControl?.destroy?.();
+  nextControl?.destroy?.();
+  beginControl = null;
+  nextControl = null;
 }
 
 async function compile(source) {
@@ -29,33 +32,57 @@ __dps_namespace = {}
 exec(__dps_user_source, __dps_namespace)
 
 if "control" not in __dps_namespace or not callable(__dps_namespace["control"]):
-    raise TypeError("control(t, A, T, cycle) 関数を定義してください。")
+    raise TypeError("control(Vmax, Amax) ジェネレーター関数を定義してください。")
 
-def __dps_run_control(t, A, T, cycle):
-    result = __dps_namespace["control"](float(t), float(A), float(T), int(cycle))
+__dps_iterator = None
+
+def __dps_begin_control(Vmax, Amax):
+    global __dps_iterator
+    result = __dps_namespace["control"](float(Vmax), float(Amax))
+    try:
+        __dps_iterator = iter(result)
+    except TypeError as error:
+        raise TypeError("control() は yield A, V を使うジェネレーターにしてください。") from error
+    return True
+
+def __dps_next_control():
+    if __dps_iterator is None:
+        raise RuntimeError("Pythonジェネレーターが開始されていません。")
+    try:
+        result = next(__dps_iterator)
+    except StopIteration:
+        return True, 0.0, 0.0
     if isinstance(result, dict):
-        if "voltage" not in result or "current" not in result:
-            raise TypeError("control() の辞書には voltage と current が必要です。")
-        voltage = result["voltage"]
-        current = result["current"]
+        if "A" in result and "V" in result:
+            current, voltage = result["A"], result["V"]
+        elif "current" in result and "voltage" in result:
+            current, voltage = result["current"], result["voltage"]
+        else:
+            raise TypeError("control() の辞書には A と V が必要です。")
     elif isinstance(result, (tuple, list)) and len(result) == 2:
-        voltage, current = result
+        current, voltage = result
     else:
-        raise TypeError("control() は {'voltage': V, 'current': A} または (V, A) を返してください。")
-    return float(voltage), float(current)
+        raise TypeError("各回は yield A, V または yield {'A': A, 'V': V} としてください。")
+    return False, float(current), float(voltage)
 `);
-    evaluateControl = pyodide.globals.get("__dps_run_control");
+    beginControl = pyodide.globals.get("__dps_begin_control");
+    nextControl = pyodide.globals.get("__dps_next_control");
   } finally {
     pyodide.globals.delete("__dps_user_source");
   }
 }
 
-function evaluate(context) {
-  if (!evaluateControl) throw new Error("Python制御コードがコンパイルされていません。");
-  const value = evaluateControl(context.t, context.A, context.T, context.cycle);
+function begin(context) {
+  if (!beginControl) throw new Error("Python制御コードがコンパイルされていません。");
+  return Boolean(beginControl(context.Vmax, context.Amax));
+}
+
+function evaluate() {
+  if (!nextControl) throw new Error("Python制御コードがコンパイルされていません。");
+  const value = nextControl();
   try {
-    const [voltage, current] = value.toJs();
-    return { voltage, current };
+    const [done, current, voltage] = value.toJs();
+    return done ? { done: true } : { done: false, current, voltage };
   } finally {
     value.destroy();
   }
@@ -68,8 +95,10 @@ self.addEventListener("message", async (event) => {
     if (type === "compile") {
       await compile(source);
       result = { compiled: true };
+    } else if (type === "begin") {
+      result = { started: begin(context) };
     } else if (type === "evaluate") {
-      result = evaluate(context);
+      result = evaluate();
     } else {
       throw new Error(`Unknown Python worker request: ${type}`);
     }

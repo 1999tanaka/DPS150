@@ -8,7 +8,13 @@ test("accepts finite Python voltage and current inside the safety limits", () =>
     { voltage: 13.5, current: 0.1 },
     { maxVoltage: 24, maxCurrent: 0.2 },
   );
-  assert.deepEqual(result, { voltage: 13.5, current: 0.1 });
+  assert.deepEqual(result, { done: false, voltage: 13.5, current: 0.1 });
+  assert.equal(Object.isFrozen(result), true);
+});
+
+test("accepts generator completion without voltage or current", () => {
+  const result = validatePythonControlResult({ done: true });
+  assert.deepEqual(result, { done: true });
   assert.equal(Object.isFrozen(result), true);
 });
 

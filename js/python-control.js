@@ -11,6 +11,10 @@ function asError(value, fallbackMessage) {
 }
 
 export function validatePythonControlResult(result, limits = {}) {
+  if (result?.done === true) {
+    return Object.freeze({ done: true });
+  }
+
   const voltage = Number(result?.voltage);
   const current = Number(result?.current);
   const maxVoltage = Number.isFinite(Number(limits.maxVoltage)) ? Number(limits.maxVoltage) : 24;
@@ -27,12 +31,12 @@ export function validatePythonControlResult(result, limits = {}) {
     );
   }
 
-  return Object.freeze({ voltage, current });
+  return Object.freeze({ done: false, voltage, current });
 }
 
 export class PythonControlEngine {
   constructor({
-    workerUrl = new URL("./python-worker.js?v=20260825.8", import.meta.url),
+    workerUrl = new URL("./python-worker.js?v=20260826.1", import.meta.url),
     workerFactory = (url, options) => new Worker(url, options),
   } = {}) {
     this.workerUrl = workerUrl;
@@ -63,11 +67,18 @@ export class PythonControlEngine {
     return { version: this.version };
   }
 
-  async evaluate(context, limits = {}) {
+  async begin(context) {
     if (!this.worker || !this.activeSource) {
       throw new Error("Python制御コードが準備されていません。");
     }
-    const result = await this.request("evaluate", { context }, EVALUATION_TIMEOUT_MS);
+    return this.request("begin", { context }, EVALUATION_TIMEOUT_MS);
+  }
+
+  async evaluate(limits = {}) {
+    if (!this.worker || !this.activeSource) {
+      throw new Error("Python制御コードが準備されていません。");
+    }
+    const result = await this.request("evaluate", {}, EVALUATION_TIMEOUT_MS);
     return validatePythonControlResult(result, limits);
   }
 
@@ -130,7 +141,7 @@ export class PythonControlEngine {
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
-        const label = type === "evaluate" ? "Python制御関数" : "Pythonコードの準備";
+        const label = ["begin", "evaluate"].includes(type) ? "Python制御関数" : "Pythonコードの準備";
         const error = new Error(`${label}が${timeoutMs} ms以内に完了しませんでした。`);
         this.terminate(error);
       }, timeoutMs);

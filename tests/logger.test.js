@@ -8,9 +8,10 @@ test("CSV contains the experiment and telemetry fields", () => {
     timestamp: "2026-08-25T09:54:00.000Z",
     recordType: "measurement",
     elapsedSeconds: 0.05,
-    A: 2,
-    T: 1,
-    cycle: 1,
+    i: 12,
+    voltageMax: 14,
+    currentMax: 0.1,
+    controlCycleMs: 50,
     commandVoltage: 9.854,
     commandCurrent: 0.1,
     measuredVoltage: 9.79,
@@ -23,8 +24,8 @@ test("CSV contains the experiment and telemetry fields", () => {
     outputEnabled: true,
   }]);
 
-  assert.match(csv, /^timestamp,record_type,elapsed_s,A,T_s,cycle,command_v/);
-  assert.match(csv, /measurement,0\.050,2\.000,1\.000,1,9\.8540,0\.1000,9\.7900,0\.5280,5\.1690,0\.048,12,CV,OK,1/);
+  assert.match(csv, /^timestamp,record_type,elapsed_s,i,Vmax,Amax,control_cycle_ms,command_v/);
+  assert.match(csv, /measurement,0\.050,12,14\.0000,0\.1000,50,9\.8540,0\.1000,9\.7900,0\.5280,5\.1690,0\.048,12,CV,OK,1/);
 });
 
 test("logger enforces its memory cap", () => {

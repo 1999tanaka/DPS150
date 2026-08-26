@@ -1,13 +1,9 @@
-import { DPS150 } from "./dps150.js?v=20260825.8";
-import { ExperimentController } from "./experiment.js?v=20260825.8";
-import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260825.8";
-import { ExperimentLogger } from "./logger.js?v=20260825.8";
-import { PythonControlEngine } from "./python-control.js?v=20260825.8";
-import {
-  calculateVoltageRange,
-  formatDuration,
-  validateExperimentConfig,
-} from "./waveform.js?v=20260825.8";
+import { DPS150 } from "./dps150.js?v=20260826.1";
+import { ExperimentController } from "./experiment.js?v=20260826.1";
+import { CurrentGraph, VoltageGraph } from "./graph.js?v=20260826.1";
+import { ExperimentLogger } from "./logger.js?v=20260826.1";
+import { PythonControlEngine } from "./python-control.js?v=20260826.1";
+import { formatDuration, validateExperimentConfig } from "./waveform.js?v=20260826.1";
 
 const byId = (id) => document.getElementById(id);
 
@@ -21,12 +17,9 @@ const elements = {
   firmwareVersion: byId("firmware-version"),
   connectButton: byId("connect-button"),
   settingsForm: byId("settings-form"),
-  currentLimit: byId("current-limit"),
-  aStart: byId("a-start"),
-  aEnd: byId("a-end"),
-  aStep: byId("a-step"),
-  cycles: byId("cycles"),
-  updateInterval: byId("update-interval"),
+  voltageMax: byId("voltage-max"),
+  currentMax: byId("current-max"),
+  controlCycle: byId("control-cycle"),
   pythonCode: byId("python-code"),
   checkPython: byId("check-python"),
   pythonStatus: byId("python-status"),
@@ -38,14 +31,10 @@ const elements = {
   runState: byId("run-state"),
   runPulse: byId("run-pulse"),
   statusMessage: byId("status-message"),
-  currentA: byId("current-a"),
-  aTotal: byId("a-total"),
-  currentPeriod: byId("current-period"),
-  currentCycle: byId("current-cycle"),
-  currentStep: byId("current-step"),
-  progressPercent: byId("progress-percent"),
-  progressFill: byId("progress-fill"),
-  progressTrack: document.querySelector(".progress-track"),
+  currentIteration: byId("current-iteration"),
+  currentControlCycle: byId("current-control-cycle"),
+  currentVmax: byId("current-vmax"),
+  currentAmax: byId("current-amax"),
   elapsedTime: byId("elapsed-time"),
   remainingTime: byId("remaining-time"),
   finishTime: byId("finish-time"),
@@ -64,12 +53,12 @@ const elements = {
   startDialog: byId("start-dialog"),
   safetyConfirm: byId("safety-confirm"),
   confirmStart: byId("confirm-start"),
-  confirmA: byId("confirm-a"),
-  confirmPeriods: byId("confirm-periods"),
-  confirmCycles: byId("confirm-cycles"),
-  confirmDuration: byId("confirm-duration"),
+  confirmVmax: byId("confirm-vmax"),
+  confirmAmax: byId("confirm-amax"),
+  confirmCycle: byId("confirm-cycle"),
+  confirmStop: byId("confirm-stop"),
   confirmControl: byId("confirm-control"),
-  confirmCurrent: byId("confirm-current"),
+  confirmReturn: byId("confirm-return"),
 };
 
 const device = new DPS150();
@@ -91,14 +80,9 @@ let pythonBusy = false;
 
 function readFormValues() {
   return {
-    currentLimit: elements.currentLimit.value,
-    aStart: elements.aStart.value,
-    aEnd: elements.aEnd.value,
-    aStep: elements.aStep.value,
-    periods: [...elements.settingsForm.querySelectorAll('input[name="period"]:checked')]
-      .map((checkbox) => checkbox.value),
-    cycles: elements.cycles.value,
-    updateInterval: elements.updateInterval.value,
+    voltageMax: elements.voltageMax.value,
+    currentMax: elements.currentMax.value,
+    controlCycleMs: elements.controlCycle.value,
     pythonSource: elements.pythonCode.value,
   };
 }
@@ -110,7 +94,8 @@ function deviceLimits() {
 
 function getConfig({ preview = false } = {}) {
   const values = readFormValues();
-  if (preview && !values.currentLimit) values.currentLimit = 1;
+  if (preview && !values.voltageMax) values.voltageMax = 14;
+  if (preview && !values.currentMax) values.currentMax = 0.1;
   return validateExperimentConfig(values, deviceLimits());
 }
 
@@ -128,23 +113,6 @@ function numericText(value, digits) {
   return Number.isFinite(value) ? value.toFixed(digits) : "—";
 }
 
-function finishClock(remainingSeconds) {
-  if (!Number.isFinite(remainingSeconds)) return "—";
-  return new Intl.DateTimeFormat("ja-JP", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(Date.now() + remainingSeconds * 1_000));
-}
-
-function setProgress(progress) {
-  const clamped = Math.max(0, Math.min(1, progress || 0));
-  const percent = clamped * 100;
-  elements.progressPercent.textContent = `${percent.toFixed(1)}%`;
-  elements.progressFill.style.width = `${percent}%`;
-  elements.progressTrack.setAttribute("aria-valuenow", percent.toFixed(1));
-}
-
 function logSummary(recordCount) {
   const base = `${recordCount.toLocaleString()}件のログ`;
   return logger.truncated ? `${base}（上限到達のため以降は省略）` : base;
@@ -158,12 +126,14 @@ function setFormDisabled(disabled) {
 }
 
 function updateButtons() {
-  const hasCurrentLimit = Number(elements.currentLimit.value) > 0;
+  const hasVoltageMax = Number(elements.voltageMax.value) > 0;
+  const hasCurrentMax = Number(elements.currentMax.value) > 0;
   const hasPythonCode = Boolean(elements.pythonCode.value.trim());
   elements.connectButton.disabled = connectionBusy;
   elements.startButton.disabled = !device.connected
     || experiment.running
-    || !hasCurrentLimit
+    || !hasVoltageMax
+    || !hasCurrentMax
     || !hasPythonCode
     || connectionBusy
     || pythonBusy;
@@ -201,24 +171,19 @@ function updateTelemetry(state = device.getState()) {
 }
 
 function updatePreview() {
-  let config;
   try {
-    config = getConfig({ preview: true });
-    elements.voltageRange.textContent = `Python output safety check 0—${config.deviceMaxVoltage.toFixed(2)} V`;
-    elements.remainingTime.textContent = formatDuration(config.totalDuration);
-    elements.aTotal.textContent = `/ ${config.aEnd.toFixed(1)}`;
-    elements.currentStep.textContent = `0 / ${config.aValues.length}`;
-    if (!experiment.running) elements.finishTime.textContent = finishClock(config.totalDuration);
-  } catch {
-    const start = Number(elements.aStart.value);
-    const end = Number(elements.aEnd.value);
-    if (Number.isFinite(start) && Number.isFinite(end)) {
-      const startRange = calculateVoltageRange(start);
-      const endRange = calculateVoltageRange(end);
-      elements.voltageRange.textContent = `Expected range ${Math.min(startRange.min, endRange.min).toFixed(2)}—${Math.max(startRange.max, endRange.max).toFixed(2)} V`;
-    } else {
-      elements.voltageRange.textContent = "Check waveform settings";
+    const config = getConfig({ preview: true });
+    elements.voltageRange.textContent = `Python output safety check 0—${config.voltageMax.toFixed(3)} V`;
+    if (!experiment.running) {
+      elements.currentIteration.textContent = "—";
+      elements.currentControlCycle.textContent = `${config.controlCycleMs} ms`;
+      elements.currentVmax.textContent = `${config.voltageMax.toFixed(3)} V`;
+      elements.currentAmax.textContent = `${config.currentMax.toFixed(3)} A`;
+      elements.remainingTime.textContent = "—";
+      elements.finishTime.textContent = "generator end";
     }
+  } catch {
+    elements.voltageRange.textContent = "Check Vmax / Amax / Control Cycle";
   }
   updateButtons();
 }
@@ -244,7 +209,7 @@ async function handleConnect() {
       const state = await device.connect();
       updateDeviceState(state);
       updateTelemetry(state);
-      setStatus("Connected. Python Current Safety Maxと実験条件を確認してください。", "success");
+      setStatus("Connected. Vmax・Amax・Control CycleとPythonコードを確認してください。", "success");
       setValidation();
     }
   } catch (error) {
@@ -271,12 +236,12 @@ function openStartConfirmation() {
     return;
   }
 
-  elements.confirmA.textContent = `${pendingConfig.aStart.toFixed(1)} → ${pendingConfig.aEnd.toFixed(1)} / ${pendingConfig.aStep.toFixed(1)}`;
-  elements.confirmPeriods.textContent = `${pendingConfig.periods.join(" / ")} sec`;
-  elements.confirmCycles.textContent = `${pendingConfig.cycles} each`;
-  elements.confirmDuration.textContent = formatDuration(pendingConfig.totalDuration);
+  elements.confirmVmax.textContent = `${pendingConfig.voltageMax.toFixed(3)} V`;
+  elements.confirmAmax.textContent = `${pendingConfig.currentMax.toFixed(3)} A`;
+  elements.confirmCycle.textContent = `${pendingConfig.controlCycleMs} ms`;
+  elements.confirmStop.textContent = "break / generator end";
   elements.confirmControl.textContent = "Browser Python · isolated Worker";
-  elements.confirmCurrent.textContent = `${pendingConfig.currentLimit.toFixed(3)} A`;
+  elements.confirmReturn.textContent = "A, V";
   elements.safetyConfirm.checked = false;
   elements.confirmStart.disabled = true;
   elements.startDialog.returnValue = "cancel";
@@ -293,7 +258,7 @@ async function runExperiment(config) {
   elements.downloadCsv.disabled = true;
   elements.runState.textContent = "Starting";
   elements.runPulse.classList.add("active");
-  setStatus("Python制御を準備し、電流安全上限と初期電圧を設定しています…", "warning");
+  setStatus("Pythonジェネレーターを準備し、最初の電流制限と電圧を安全確認しています…", "warning");
 
   try {
     activeRunPromise = experiment.start(config);
@@ -337,23 +302,20 @@ async function handleCheckPython() {
   elements.pythonStatus.className = "python-status python-status-loading";
   updateButtons();
   try {
+    const config = getConfig();
     const runtime = await pythonControl.prepare(source);
-    const state = device.getState();
-    const configuredMax = Number(elements.currentLimit.value);
-    const maxCurrent = Number.isFinite(configuredMax) && configuredMax > 0
-      ? Math.min(configuredMax, state.maxCurrent || configuredMax)
-      : (state.maxCurrent || 5);
+    await pythonControl.begin({
+      Vmax: config.voltageMax,
+      Amax: config.currentMax,
+    });
     const sample = await pythonControl.evaluate({
-      t: 0,
-      A: Number(elements.aStart.value) || 2,
-      T: Number(elements.settingsForm.querySelector('input[name="period"]:checked')?.value) || 1,
-      cycle: 1,
-    }, {
-      maxVoltage: state.maxVoltage || 24,
-      maxCurrent,
+      maxVoltage: Math.min(config.voltageMax, config.deviceMaxVoltage),
+      maxCurrent: Math.min(config.currentMax, config.deviceMaxCurrent),
     });
     elements.pythonRuntimeBadge.textContent = `Python ${runtime.version} · Worker`;
-    elements.pythonStatus.textContent = `Ready · t=0 → ${sample.voltage.toFixed(3)} V / ${sample.current.toFixed(3)} A`;
+    elements.pythonStatus.textContent = sample.done
+      ? "Ready · yieldなし（実行すると直ちに正常終了）"
+      : `Ready · i=0 → ${sample.current.toFixed(3)} A / ${sample.voltage.toFixed(3)} V`;
     elements.pythonStatus.className = "python-status python-status-ready";
     setValidation();
   } catch (error) {
@@ -412,7 +374,7 @@ device.addEventListener("error", (event) => {
 
 experiment.addEventListener("started", () => {
   elements.runState.textContent = "Running";
-  setStatus("Experiment running. このページを前面に保ち、PCをスリープさせないでください。", "success");
+  setStatus("Python control running. break・ジェネレーター終了・STOPまで周期実行します。", "success");
 });
 
 experiment.addEventListener("pythonstatus", (event) => {
@@ -441,18 +403,17 @@ experiment.addEventListener("segment", () => {
 
 experiment.addEventListener("progress", (event) => {
   const sample = event.detail;
-  elements.currentA.textContent = sample.A.toFixed(1);
-  elements.currentPeriod.textContent = `${sample.T} s`;
-  elements.currentCycle.textContent = `${sample.cycle} / ${activeConfig?.cycles ?? "—"}`;
-  elements.currentStep.textContent = `${sample.aIndex + 1} / ${sample.aCount}`;
+  elements.currentIteration.textContent = String(sample.i);
+  elements.currentControlCycle.textContent = `${sample.controlCycleMs} ms`;
+  elements.currentVmax.textContent = `${sample.voltageMax.toFixed(3)} V`;
+  elements.currentAmax.textContent = `${sample.currentMax.toFixed(3)} A`;
   elements.commandVoltage.textContent = sample.commandVoltage.toFixed(3);
   if (elements.commandCurrent) {
     elements.commandCurrent.textContent = sample.commandCurrent.toFixed(3);
   }
   elements.elapsedTime.textContent = formatDuration(sample.elapsedSeconds);
-  elements.remainingTime.textContent = formatDuration(sample.remainingSeconds);
-  elements.finishTime.textContent = finishClock(sample.remainingSeconds);
-  setProgress(sample.progress);
+  elements.remainingTime.textContent = "—";
+  elements.finishTime.textContent = "generator end";
   voltageGraph.addPoint({
     time: sample.elapsedSeconds,
     commandVoltage: sample.commandVoltage,
@@ -481,8 +442,7 @@ experiment.addEventListener("completed", (event) => {
   elements.elapsedTime.textContent = formatDuration(event.detail.elapsedSeconds);
   elements.remainingTime.textContent = "00:00:00";
   elements.finishTime.textContent = new Intl.DateTimeFormat("ja-JP", { hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
-  setProgress(1);
-  setStatus(`Completed. OUTPUT OFF. ${logSummary(event.detail.recordCount)}を保存できます。`, "success");
+  setStatus(`Completed at i=${event.detail.iterations}. OUTPUT OFF. ${logSummary(event.detail.recordCount)}を保存できます。`, "success");
   elements.downloadCsv.disabled = logger.size === 0;
   elements.pythonStatus.textContent = "Completed · Worker stopped";
   elements.pythonStatus.className = "python-status";

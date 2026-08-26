@@ -14,8 +14,8 @@ Python版URL（GitHub Pages）:
 
 ## 重要な安全上の注意
 
-- 実験前に、負荷へ適合する **Python Current Safety Max** とDPS-150本体のOVP / OCP等を設定してください。この値はPythonが返せる電流指令の絶対上限です。
-- 初回は固定5 V、OUTPUT ON/OFF、短い1周期試験の順に確認し、最初から約97分のフルシーケンスを実行しないでください。
+- 実験前に、負荷へ適合する **Vmax** と **Amax**、DPS-150本体のOVP / OCP等を設定してください。Pythonの戻り値はこの上限を超えないか送信前に検査します。
+- 初回は固定5 V、OUTPUT ON/OFF、少ないループ回数の順に確認し、最初から長時間のジェネレーターを実行しないでください。
 - STOP、正常終了、通信エラー時にはOUTPUT OFFを送信します。ただしUSB抜去、ブラウザ終了、PCスリープ等では、WebアプリからのOUTPUT OFFを保証できません。
 - Command Voltageは設定指令値です。実際のアナログ出力波形はオシロスコープやデータロガーで確認してください。
 - 本アプリのDPS-150実機での最終検証は、利用者の機器・負荷・ファームウェア環境で実施してください。
@@ -25,9 +25,9 @@ Python版URL（GitHub Pages）:
 1. DPS-150を会社PCへUSB接続します。
 2. ChromeまたはEdgeで上記GitHub Pages URLを開きます。
 3. `CONNECT DEVICE`を押し、DPS-150のシリアルポートを選択します。
-4. 試験対象に適したPython Current Safety Maxを入力します。
+4. 試験対象に適したVmaxとAmax、Control Cycleを入力します。
 5. 画面の`control.py`へ電圧・電流の制御式を書き、`CHECK PYTHON`で構文と初期値を確認します。
-6. A、周期、サイクル数、更新間隔を確認して`START`を押します。
+6. `control(Vmax, Amax)`ジェネレーターの内容を確認して`START`を押します。
 7. 確認画面で配線と安全上限の確認にチェックし、`START OUTPUT`を押します。
 8. 実行中はページを前面に保ち、PCをスリープさせないでください。
 9. 終了後、必要に応じて`DOWNLOAD CSV`からログを保存します。
@@ -36,46 +36,45 @@ Python版URL（GitHub Pages）:
 
 ## Python制御コード
 
-各更新点で次の関数を呼び出します。
+画面で選択したControl Cycleごとに、次のジェネレーターから1個の指令を取り出します。
 
 ```python
-import math
+def control(Vmax, Amax):
+    Imax = 100
 
-def control(t, A, T, cycle):
-    voltage = (7 + A / 2) + (7 - A / 2) * math.sin(2 * math.pi * t / T)
-    current = 0.100
-    return {"voltage": voltage, "current": current}
+    for i in range(10000):
+        if i >= Imax:
+            break
+
+        A = min(Amax, 0.100)
+        V = min(Vmax, 13.0 + 0.01 * i)
+        yield A, V
 ```
 
-引数`t`は現在のA/T条件を開始してからの実経過秒、`A`と`T`は画面のシーケンス条件、`cycle`は1始まりの現在周期です。戻り値は`{"voltage": V, "current": A}`または`(V, A)`とします。
+`Vmax`と`Amax`は画面で指定した上限です。`i`はPython自身の`for`ループで管理します。各回の指令は電流制限を先、電圧を後にした`yield A, V`または`yield {"A": A, "V": V}`です。`break`、`range()`の終了、関数末尾への到達で正常終了し、OUTPUT OFFします。
 
-PythonはUIやSTOP処理とは別のWeb Workerで動きます。コード準備が3秒、1回の制御計算が750 msを超えた場合はWorkerを強制終了し、DPS-150へOUTPUT OFFを送ります。電圧は0 V以上かつ機器上限以下、電流は0 Aより大きく画面の安全上限以下でなければ送信しません。外部パッケージのダウンロードは行わず、同梱されたPython標準ライブラリだけを対象とします。
+Python内に`time.sleep()`を書く必要はありません。画面側がControl Cycleの時間だけ待ってからジェネレーターを次へ進めます。Python側でもsleepするとその時間が追加され、周期が長くなるため使用しないでください。
 
-## デフォルト実験条件
+PythonはUIやSTOP処理とは別のWeb Workerで動きます。コード準備が3秒、1回の制御計算が750 msを超えた場合はWorkerを強制終了し、DPS-150へOUTPUT OFFを送ります。電圧は0 V以上かつVmax・機器上限以下、電流は0 Aより大きくAmax・機器上限以下でなければ送信しません。外部パッケージのダウンロードは行わず、同梱されたPython標準ライブラリだけを対象とします。
 
-電圧指令は次式です。
-
-```text
-V(t) = (7 + A/2) + (7 - A/2) sin(2πt/T)
-```
+## デフォルト制御条件
 
 | 項目 | デフォルト |
 | --- | ---: |
-| A Start / End / Step | 2.0 / 14.0 / 0.1 |
-| Periods | 1 / 5 / 10 s |
-| Cycles / Period | 3 |
-| Update Interval | 50 ms |
-| 条件数 | 121 |
-| 理論実行時間 | 5,808 s（01:36:48） |
+| Vmax | 14.000 V |
+| Amax | 0.100 A |
+| Control Cycle | 50 ms |
+| 終了条件 | `break`またはジェネレーター終了 |
+| 指令順序 | `yield A, V` |
 
-Aは整数スケーリングで生成するため、0.1の繰り返し加算による浮動小数点誤差を避けています。各電圧指令は`performance.now()`による実経過時間から計算し、タイマー遅延による周期ずれを累積させません。
+Control Cycleは`performance.now()`を基準にスケジュールします。Python計算やシリアル通信が指定周期より長い場合、遅れた回を短時間にまとめて実行せず、次回を指定周期後へ送り直します。
 
 ## 実装機能
 
 - Web Serialによる115200 bps接続、セッション初期化、機器情報取得
 - 電圧・Current Limit設定、OUTPUT ON/OFF
-- A / T / Cycleの自動シーケンス
-- WebUI内のPythonによる電圧・電流指令生成
+- Vmax / AmaxとPythonの`for i in range(...)`を使った周期制御
+- WebUI内のPythonによる電流制限・電圧指令生成と`break`による正常終了
 - Pythonを分離Workerで実行し、ハング時はWorker終了・OUTPUT OFF
 - Python指令値の有限値・電圧上限・電流安全上限チェック
 - STOP最優先制御、二重START防止、実行中の設定ロック
@@ -87,7 +86,7 @@ Aは整数スケーリングで生成するため、0.1の繰り返し加算に�
 - レジスタ0xC3を50 ms周期（目標20 Hz）で明示読出し
 - DPS-150から届いた実測点のみを受信時刻で表示し、実測点間は補間・接続しない
 - 実測の生データ更新レートを画面表示
-- Command / Measuredの電圧・電流数値、Measured Power、進捗・残り時間表示
+- Command / Measuredの電圧・電流数値、Measured Power、実行回数・経過時間表示
 - Wake Lock（利用可能なブラウザのみ）とページ離脱警告
 - 指令行と実測行を区別し、受信時刻・実測サンプル番号を含む最大250,000件のCSVログ
 - Pyodide 314.0.6をリポジトリ内に同梱（外部CDN不使用）
@@ -102,8 +101,8 @@ css/
 js/
   main.js          UIとイベント連携
   dps150.js        Web Serial・DPS-150プロトコル
-  waveform.js      波形計算・設定検証
-  experiment.js    実験シーケンス・安全停止
+  waveform.js      Vmax / Amax / Control Cycleの設定検証
+  experiment.js    Python周期制御・安全停止
   graph.js         Canvasグラフ
   logger.js        ログ・CSV
   python-control.js Python Workerとの安全な要求・タイムアウト管理
@@ -130,7 +129,7 @@ F1 <command> <register> <length> <data...> <checksum>
 - Checksum: `(register + length + sum(data)) & 0xff`
 - Output ON: `F1 B1 DB 01 01 DD`（OFFはデータ`00`）
 
-Current Limit、初期電圧、OUTPUT ON等の制御遷移には60 msのコマンド間隔を設けています。波形更新中は選択したUpdate Intervalを使用します。
+Current Limit、初期電圧、OUTPUT ON等の制御遷移には60 msのコマンド間隔を設けています。実行中は選択したControl CycleごとにPythonを呼び出します。
 
 通信レジスタとフレーム形式は、cho45氏のMITライセンス実装 [cho45/fnirsi-dps-150](https://github.com/cho45/fnirsi-dps-150) を参考にしています。詳細は[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)を参照してください。プロトコルは非公式のリバースエンジニアリング情報であり、FNIRSI公式仕様ではありません。
 
